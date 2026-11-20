@@ -23,8 +23,6 @@ import { type Picture, PICTURES } from './pictures';
 import { canGetStuck, solve } from './solver';
 
 export interface LevelParams {
-  /** Номер картинки в PICTURES. */
-  readonly picture: number;
   /** Перекрасить внешний слой в цвет обводки. */
   readonly outline: boolean;
   readonly columns: number;
@@ -63,7 +61,6 @@ export function levelParams(level: number): LevelParams {
   const n = Math.max(1, Math.floor(level));
   const progress = Math.min(1, Math.max(0, (n - OUTLINE_FROM) / (ORDER_END_LEVEL - OUTLINE_FROM)));
   return {
-    picture: (n - 1) % PICTURES.length,
     outline: n >= OUTLINE_FROM,
     columns: n <= 5 ? 3 : 4,
     // блоки мельче с уровнем: на старте 3–8, к 50-му 1–4
@@ -175,7 +172,17 @@ function acceptable(state: AntsState, params: LevelParams): boolean {
 }
 
 /**
- * Уровень по номеру (с 1) и seed. Детерминированно: тот же (level, seed) → тот же уровень.
+ * Картинка уровня — по seed, а не по сложности: на одной сложности (адаптивная
+ * держит её, пока нет 3 чистых побед) картинки всё равно идут по кругу.
+ * seed = L даёт ту же картинку, что раньше давал уровень L (миграция v1 → v2).
+ */
+export function pictureIndex(seed: number): number {
+  const count = PICTURES.length;
+  return (((Math.floor(seed) - 1) % count) + count) % count;
+}
+
+/**
+ * Уровень по сложности (с 1) и seed. Детерминированно: тот же (level, seed) → тот же уровень.
  * Нерешаемый вариант отбрасывается, берётся следующий seed, и порядок чуть смягчается
  * (ORDER_RELAX за попытку): картинки с большими внутренними областями (домик) на сильно
  * перевёрнутом порядке почти всегда нерешаемы — так генератор быстро находит
@@ -183,7 +190,7 @@ function acceptable(state: AntsState, params: LevelParams): boolean {
  */
 export function makeLevel(level: number, seed: number): AntsState {
   const params = levelParams(level);
-  const source = PICTURES[params.picture]!;
+  const source = PICTURES[pictureIndex(seed)]!;
   const picture = params.outline ? outlinePicture(source) : source;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const order = Math.min(1, params.order + attempt * ORDER_RELAX);

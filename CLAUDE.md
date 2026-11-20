@@ -50,7 +50,7 @@
 - `src/main.tsx` — вход, регистрация service worker.
 - `src/app/storage.ts` — единственное место с `localStorage`: загрузка/сохранение прогресса, копия битого в `umka-progress-broken`. В dev `?level=N` открывает любой уровень.
 - `src/app/base.css` — базовые стили и iOS-защиты (safe-area, верхняя зона `.sky`, без зума и «резинки»); `src/app/ios.ts` — гашение щипка и двойного тапа.
-- `src/app/` — оболочка: меню, экран игры, альбом, родительский экран. Только она трогает хранилище и решает, какой экран показан.
+- `src/app/` — оболочка: меню, экран игры (`GameHost.tsx` — сессия, сложность, награда), альбом, родительский экран. Только она трогает хранилище и решает, какой экран показан.
 - `src/engine/` — **чистый TypeScript без React и DOM:** контракт игры (`types.ts`), история и Undo (`history.ts`), сессия уровня (`session.ts`), адаптивная сложность (`difficulty.ts`), сидируемый генератор случайных чисел (`rng.ts`), прогресс и миграции (`progress.ts`).
 - `src/audio/` — эффекты (`sfx.ts`), голос (`voice.ts`, список фраз `phrases.ts`), разблокировка звука первым касанием.
 - `src/rewards/` — наклейки (генерация SVG), конфетти, альбом.
@@ -61,21 +61,35 @@
 - `tests/` — Vitest (свой `tests/tsconfig.json` с типами Node); `tests/fixtures/` — сохранённые прогрессы прошлых версий.
 
 ## Контракт игры
-Черновик, точную форму задаёт задача каркаса «engine/core». Если меняешь контракт — обнови этот раздел.
+Задан в `src/engine/types.ts` (задача engine/core). Если меняешь контракт — обнови этот раздел.
 
 ```ts
 interface GameModule<State, Move> {
-  id: string;                                         // 'color-jam'
+  id: string;                                         // 'ants', 'color-jam' — ключ в прогрессе
   Icon: ComponentType;                                // иконка в меню, без текста
   startDifficulty: number;                            // с чего начинает новый игрок
-  makeLevel(difficulty: number, seed: number): State; // детерминированно: тот же seed → тот же уровень
+  minDifficulty: number;                              // ниже адаптивная сложность не опускается
+  makeLevel(difficulty: number, seed: number): State; // детерминированно: тот же (difficulty, seed) → тот же уровень
   applyMove(state: State, move: Move): State | null;  // null — ход невозможен; state не мутирует
   isWon(state: State): boolean;
   isStuck(state: State): boolean;                     // к победе не пройти → пульсирует Undo
   hint(state: State): Move | null;                    // следующий ход решателя
   Screen: ComponentType<GameScreenProps<State, Move>>;
 }
+
+interface GameScreenProps<State, Move> {
+  state: State; start: State;                         // текущий и стартовый снимки
+  won: boolean; stuck: boolean; canUndo: boolean;
+  onMove(move: Move): boolean;                        // false — ход невозможен
+  onUndo(): void; onRestart(): void;
+  onWinShown(): void;                                 // экран доиграл свою анимацию победы
+}
 ```
+
+Кто что делает:
+- **Оболочка** (`src/app/GameHost.tsx`) ведёт сессию уровня (`engine/session.ts`: история, ходы, подсказки, «был тупик»), адаптивную сложность (`engine/difficulty.ts`), прогресс и награду. Победа сохраняется сразу: новая сложность и `seed + 1`.
+- **Экран игры** только показывает `state` и зовёт `onMove`. Своё изменение он узнаёт по ходам, которые сам отправил; любое другое (Undo, «заново») показывает мгновенно.
+- Уровень = `(difficulty, seed)`. Сложность меняет адаптация, `seed` растёт на 1 с каждой победой — так на одной сложности уровни всё равно разные.
 
 Правила:
 - Логика игры — чистые функции над неизменяемыми снимками. На этом держится Undo: история — это просто массив снимков.
