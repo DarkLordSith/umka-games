@@ -1,43 +1,31 @@
-import { useRef, useState } from 'react';
-import { GAME_COLORS } from '../ui/palette';
-import './placeholder.css';
+import { useState } from 'react';
+import { type Progress, withAntsLevel } from '../engine/progress';
+import { AntsScreen } from '../games/ants/Screen';
+import { loadProgress, saveProgress } from './storage';
+
+/** В dev можно открыть любой уровень: ?level=12 (для скриншотов и проверки кривой). */
+function devLevel(): number | null {
+  if (!import.meta.env.DEV) {
+    return null;
+  }
+  const value = Number(new URLSearchParams(window.location.search).get('level'));
+  return Number.isInteger(value) && value >= 1 ? value : null;
+}
 
 /**
- * Экран-заглушка каркаса: фон и крупный яркий круг без текста.
- * Тап — круг сплющивается и меняет цвет (проверка касаний и анимаций на iPhone).
- * Задача ants/screen-mvp заменит его экраном муравьёв.
+ * Оболочка. Пока одна игра — открываемся сразу в муравьях (меню — задача 5).
+ * Только оболочка трогает хранилище: победа сохраняется сразу, ещё до празднования,
+ * чтобы закрытое на конфетти приложение открылось уже на следующем уровне.
  */
 export function App() {
-  const [colorIndex, setColorIndex] = useState(0);
-  const circle = useRef<HTMLButtonElement>(null);
-  const color = GAME_COLORS[colorIndex % GAME_COLORS.length]!;
+  const [progress, setProgress] = useState<Progress>(loadProgress);
+  const [level, setLevel] = useState(() => devLevel() ?? progress.games.ants.level);
 
-  const tap = () => {
-    setColorIndex(index => index + 1);
-    circle.current?.animate(
-      [
-        { transform: 'scale(1, 1)' },
-        { transform: 'scale(1.18, 0.82)' },
-        { transform: 'scale(0.94, 1.06)' },
-        { transform: 'scale(1, 1)' },
-      ],
-      { duration: 420, easing: 'ease-out' },
-    );
+  const onWin = () => {
+    const next = withAntsLevel(progress, level + 1);
+    saveProgress(next);
+    setProgress(next);
   };
 
-  return (
-    <>
-      <div className="sky" aria-hidden="true" />
-      <main className="stage">
-        <button
-          ref={circle}
-          type="button"
-          className="placeholder-circle"
-          style={{ background: `var(--game-${color.id})` }}
-          aria-label="круг"
-          onPointerDown={tap}
-        />
-      </main>
-    </>
-  );
+  return <AntsScreen key={level} level={level} onWin={onWin} onNext={() => setLevel(level + 1)} />;
 }

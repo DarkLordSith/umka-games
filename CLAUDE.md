@@ -48,13 +48,14 @@
 > План. Поддерживай раздел в актуальном виде, когда меняешь структуру.
 
 - `src/main.tsx` — вход, регистрация service worker.
+- `src/app/storage.ts` — единственное место с `localStorage`: загрузка/сохранение прогресса, копия битого в `umka-progress-broken`. В dev `?level=N` открывает любой уровень.
 - `src/app/base.css` — базовые стили и iOS-защиты (safe-area, верхняя зона `.sky`, без зума и «резинки»); `src/app/ios.ts` — гашение щипка и двойного тапа.
 - `src/app/` — оболочка: меню, экран игры, альбом, родительский экран. Только она трогает хранилище и решает, какой экран показан.
 - `src/engine/` — **чистый TypeScript без React и DOM:** контракт игры (`types.ts`), история и Undo (`history.ts`), сессия уровня (`session.ts`), адаптивная сложность (`difficulty.ts`), сидируемый генератор случайных чисел (`rng.ts`), прогресс и миграции (`progress.ts`).
 - `src/audio/` — эффекты (`sfx.ts`), голос (`voice.ts`, список фраз `phrases.ts`), разблокировка звука первым касанием.
 - `src/rewards/` — наклейки (генерация SVG), конфетти, альбом.
 - `src/ui/` — общие компоненты (крупная кнопка, долгое нажатие, рука-подсказка) и палитра.
-- `src/games/<id>/` — модуль игры: `index.ts` (`GameModule`), `logic.ts`, `generator.ts`, `solver.ts`, `Screen.tsx`, свои ассеты. `src/games/registry.ts` — список игр в меню.
+- `src/games/<id>/` — модуль игры: `index.ts` (`GameModule`), `logic.ts`, `generator.ts`, `solver.ts`, `Screen.tsx`, свои ассеты. У муравьёв ещё `render.ts` — canvas-слой (картинка и муравьи), DOM — колонки, слоты, кнопки. `src/games/registry.ts` — список игр в меню.
 - `public/voice/` — записи голоса, `<id>.m4a`.
 - `public/icons/` — иконки PWA, генерирует `npm run icons` (`scripts/icons.ts`, SVG → PNG через resvg, цвета из палитры).
 - `tests/` — Vitest (свой `tests/tsconfig.json` с типами Node); `tests/fixtures/` — сохранённые прогрессы прошлых версий.
