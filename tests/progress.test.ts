@@ -12,7 +12,7 @@ import {
   withoutGame,
   withSettings,
 } from '../src/engine/progress';
-import { makeLevel, pictureIndex } from '../src/games/ants/generator';
+import { makeLevel } from '../src/games/ants/generator';
 
 const FIXTURES = join(import.meta.dirname, 'fixtures');
 const fixture = (name: string) => readFileSync(join(FIXTURES, name), 'utf8');
@@ -48,9 +48,9 @@ describe('прогресс', () => {
   });
 
   it('после обновления — тот же самый уровень муравьёв, что был в v1', () => {
-    // v1 строил уровень L как makeLevel(L, L) с картинкой по номеру уровня
+    // v1 строил уровень L как makeLevel(L, L). Картинка у него уже другая (картинок стало больше),
+    // но сложность и номер уровня те же.
     const ants = migrate(JSON.parse(fixture('progress-v1.json'))).games.ants!;
-    expect(pictureIndex(ants.seed)).toBe((7 - 1) % 10);
     expect(makeLevel(ants.difficulty, ants.seed)).toEqual(makeLevel(7, 7));
   });
 

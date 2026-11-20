@@ -3,9 +3,10 @@
 // Файл без импортов: его читают и браузер, и vite.config.ts, и scripts/icons.ts.
 
 /**
- * Игровые цвета — «конфетные», ровно 8 и не больше.
+ * Игровые цвета — 8 «конфетных» + чёрный (контур картинок с 4-го уровня, глаза, колёса).
+ * Больше не добавлять: хуже различаются.
  * id совпадают с фразами озвучки `color-<id>` из docs/VOICE.md.
- * Порядок важен: в уровнях цвет хранится индексом в этом массиве.
+ * Порядок важен: в уровнях цвет хранится индексом в этом массиве — новые только в конец.
  */
 export const GAME_COLORS = [
   { id: 'red', hex: '#f2334b' },
@@ -16,7 +17,12 @@ export const GAME_COLORS = [
   { id: 'blue', hex: '#2a75ff' },
   { id: 'purple', hex: '#8b2fd9' },
   { id: 'pink', hex: '#ff7cc8' },
+  /** тёплый тёмный, как контур блоков (ink), а не чистый #000 */
+  { id: 'black', hex: '#2b1f30' },
 ] as const;
+
+/** Индекс чёрного в GAME_COLORS. */
+export const BLACK = GAME_COLORS.findIndex(color => color.id === 'black');
 
 export type GameColorId = (typeof GAME_COLORS)[number]['id'];
 

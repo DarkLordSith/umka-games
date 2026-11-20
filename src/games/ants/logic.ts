@@ -47,8 +47,61 @@ export interface TapResult {
   readonly events: readonly EatEvent[];
 }
 
-/** Пиксель доступен: непустой и хотя бы один сосед по 4 направлениям пуст или за краем. */
-function accessibleAt(width: number, height: number, pixels: readonly number[], index: number): boolean {
+/**
+ * «Снаружи»: пустые клетки, связанные с внешним краем картинки (заливка от края по пустым).
+ * Замкнутая дырка внутри картинки (бублик, руль) — не снаружи: муравьи сквозь стену не ходят.
+ * 1 — снаружи, 0 — нет (непустая клетка или замкнутая дырка).
+ */
+export function outsideMask(width: number, height: number, pixels: readonly number[]): Uint8Array {
+  const outside = new Uint8Array(pixels.length);
+  const queue: number[] = [];
+  const seed = (index: number) => {
+    if (pixels[index] === EMPTY && outside[index] === 0) {
+      outside[index] = 1;
+      queue.push(index);
+    }
+  };
+  for (let x = 0; x < width; x++) {
+    seed(x);
+    seed((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y++) {
+    seed(y * width);
+    seed(y * width + width - 1);
+  }
+  flood(width, pixels, outside, queue);
+  return outside;
+}
+
+/** Заливка «снаружи» от клеток очереди по пустым соседям. Мутирует outside. */
+function flood(width: number, pixels: readonly number[], outside: Uint8Array, queue: number[]): void {
+  while (queue.length > 0) {
+    const index = queue.pop()!;
+    const x = index % width;
+    const visit = (next: number) => {
+      if (pixels[next] === EMPTY && outside[next] === 0) {
+        outside[next] = 1;
+        queue.push(next);
+      }
+    };
+    if (x > 0) visit(index - 1);
+    if (x < width - 1) visit(index + 1);
+    if (index >= width) visit(index - width);
+    if (index + width < pixels.length) visit(index + width);
+  }
+}
+
+/** Клетку съели: она теперь снаружи, и через неё наружу открываются замкнутые дырки рядом. */
+function openCell(width: number, pixels: readonly number[], outside: Uint8Array, index: number): void {
+  outside[index] = 1;
+  flood(width, pixels, outside, [index]);
+}
+
+/**
+ * Пиксель доступен: непустой и граничит с краем картинки или с пустой клеткой,
+ * связанной с внешним краем (outsideMask).
+ */
+function accessibleAt(width: number, height: number, pixels: readonly number[], outside: Uint8Array, index: number): boolean {
   if (pixels[index] === EMPTY) {
     return false;
   }
@@ -59,15 +112,28 @@ function accessibleAt(width: number, height: number, pixels: readonly number[], 
     y === 0 ||
     x === width - 1 ||
     y === height - 1 ||
-    pixels[index - 1] === EMPTY ||
-    pixels[index + 1] === EMPTY ||
-    pixels[index - width] === EMPTY ||
-    pixels[index + width] === EMPTY
+    outside[index - 1] === 1 ||
+    outside[index + 1] === 1 ||
+    outside[index - width] === 1 ||
+    outside[index + width] === 1
   );
 }
 
+/** Индексы доступных пикселей картинки (генератор снимает по ним «луковицу»). */
+export function accessibleIndices(width: number, height: number, pixels: readonly number[]): number[] {
+  const outside = outsideMask(width, height, pixels);
+  const result: number[] = [];
+  for (let index = 0; index < pixels.length; index++) {
+    if (accessibleAt(width, height, pixels, outside, index)) {
+      result.push(index);
+    }
+  }
+  return result;
+}
+
 export function isAccessible(state: AntsState, x: number, y: number): boolean {
-  return accessibleAt(state.width, state.height, state.pixels, y * state.width + x);
+  const outside = outsideMask(state.width, state.height, state.pixels);
+  return accessibleAt(state.width, state.height, state.pixels, outside, y * state.width + x);
 }
 
 /**
@@ -106,9 +172,9 @@ function anthillOrder(width: number, height: number): readonly number[] {
  * Какой пиксель цвета `color` съест следующий муравей: первый доступный
  * в порядке anthillOrder. −1 — есть нечего.
  */
-function nextPixel(width: number, height: number, pixels: readonly number[], color: number): number {
+function nextPixel(width: number, height: number, pixels: readonly number[], outside: Uint8Array, color: number): number {
   for (const index of anthillOrder(width, height)) {
-    if (pixels[index] === color && accessibleAt(width, height, pixels, index)) {
+    if (pixels[index] === color && accessibleAt(width, height, pixels, outside, index)) {
       return index;
     }
   }
@@ -117,18 +183,19 @@ function nextPixel(width: number, height: number, pixels: readonly number[], col
 
 /** Есть ли у цвета хотя бы один доступный пиксель. */
 export function canEat(state: AntsState, color: number): boolean {
-  return nextPixel(state.width, state.height, state.pixels, color) !== -1;
+  return canEatWith(state, outsideMask(state.width, state.height, state.pixels), color);
+}
+
+function canEatWith(state: AntsState, outside: Uint8Array, color: number): boolean {
+  return nextPixel(state.width, state.height, state.pixels, outside, color) !== -1;
 }
 
 /** Все доступные пиксели (для экрана и тестов). */
 export function accessiblePixels(state: AntsState): { x: number; y: number }[] {
-  const result: { x: number; y: number }[] = [];
-  for (let index = 0; index < state.pixels.length; index++) {
-    if (accessibleAt(state.width, state.height, state.pixels, index)) {
-      result.push({ x: index % state.width, y: Math.floor(index / state.width) });
-    }
-  }
-  return result;
+  return accessibleIndices(state.width, state.height, state.pixels).map(index => ({
+    x: index % state.width,
+    y: Math.floor(index / state.width),
+  }));
 }
 
 /** Первый свободный слот или −1. */
@@ -143,6 +210,7 @@ export function freeSlot(state: AntsState): number {
  */
 function resolve(width: number, height: number, pixels: number[], slots: (Slot | null)[]): EatEvent[] {
   const events: EatEvent[] = [];
+  const outside = outsideMask(width, height, pixels);
   let ate = true;
   while (ate) {
     ate = false;
@@ -151,11 +219,12 @@ function resolve(width: number, height: number, pixels: number[], slots: (Slot |
       if (!occupant) {
         continue;
       }
-      const index = nextPixel(width, height, pixels, occupant.color);
+      const index = nextPixel(width, height, pixels, outside, occupant.color);
       if (index === -1) {
         continue;
       }
       pixels[index] = EMPTY;
+      openCell(width, pixels, outside, index);
       events.push({ slot, x: index % width, y: Math.floor(index / width) });
       slots[slot] = occupant.left > 1 ? { color: occupant.color, left: occupant.left - 1 } : null;
       ate = true;
@@ -202,7 +271,11 @@ export function isWon(state: AntsState): boolean {
 
 /** Тупик: свободных слотов нет и никто не может есть. Лечится Undo. */
 export function isStuck(state: AntsState): boolean {
-  return freeSlot(state) === -1 && state.slots.every(slot => slot !== null && !canEat(state, slot.color));
+  if (freeSlot(state) !== -1) {
+    return false;
+  }
+  const outside = outsideMask(state.width, state.height, state.pixels);
+  return state.slots.every(slot => slot !== null && !canEatWith(state, outside, slot.color));
 }
 
 /** Пикселей каждого цвета на картинке. */
