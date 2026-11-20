@@ -46,9 +46,10 @@ describe('генератор', () => {
     expect(slow).toEqual([]);
   });
 
-  it(`первые ${SAFE_LEVELS} уровня — без возможного тупика`, () => {
+  it(`сложность 1–${SAFE_LEVELS} — без возможного тупика на любой картинке`, () => {
     for (let level = 1; level <= SAFE_LEVELS; level++) {
-      for (const seed of [1, 2, 3]) {
+      // seed 1…10 — все картинки по кругу (картинку выбирает seed)
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
         expect(canGetStuck(makeLevel(level, seed)), `уровень ${level}, seed ${seed}`).toBe(false);
       }
     }

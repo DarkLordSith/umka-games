@@ -1,25 +1,20 @@
 // Экран муравьёв: DOM-раскладка (колонки, слоты, кнопки) + canvas-слой (картинка и муравьи).
 // Сверху вниз: фон под статус-баром → картинка → муравейник и 5 слотов →
-// стопки блоков до нижнего края экрана; справа от стопок — «заново» и Undo.
-import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { canUndo, createHistory, current, type History, push, restart, undo } from '../../engine/history';
-import { Confetti } from '../../ui/Confetti';
+// стопки (3 ряда) → нижняя полоса с «заново» и Undo.
+//
+// Экран по контракту (engine/types.ts): состояние, Undo и победу ведёт оболочка.
+// Экран только анимирует: свой ход он узнаёт по pending (колонка, которую тапнули),
+// любое другое изменение state (Undo, «заново») — мгновенный сброс картинки.
+import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { GameScreenProps } from '../../engine/types';
 import { RestartIcon, UndoIcon } from '../../ui/icons';
 import { GAME_COLORS } from '../../ui/palette';
-import { makeLevel } from './generator';
-import { type AntsState, type Block, isStuck, isWon, SLOT_COUNT, tap } from './logic';
+import { type AntsMove, type AntsState, type Block, SLOT_COUNT, tap } from './logic';
 import { AntsRenderer, type Layout } from './render';
 import { antHome, antLeft, placeBlock, type SlotsView, viewFromSlots } from './slotView';
 import './screen.css';
 
-export interface AntsScreenProps {
-  /** Номер уровня, с 1. Уровень детерминирован: seed = номер. */
-  readonly level: number;
-  /** Уровень пройден (оболочка сохраняет прогресс сразу, до празднования). */
-  readonly onWin: () => void;
-  /** Тап после празднования — следующий уровень. */
-  readonly onNext: () => void;
-}
+export type AntsScreenProps = GameScreenProps<AntsState, AntsMove>;
 
 /** Полёт блока из колонки в слот, мс. Муравьи стартуют после него. */
 const FLIGHT_MS = 240;
@@ -36,14 +31,16 @@ function relativeRect(element: Element, root: Element) {
   return { x: box.left - base.left, y: box.top - base.top, w: box.width, h: box.height };
 }
 
-export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
-  const start = useMemo(() => makeLevel(level, level), [level]);
-  const [history, setHistory] = useState<History<AntsState>>(() => createHistory(start));
-  const historyRef = useRef(history);
-  historyRef.current = history;
-  const state = current(history);
-  const won = isWon(state);
-  const [celebrating, setCelebrating] = useState(false);
+export function AntsScreen({ state, start, won, stuck, canUndo, onMove, onUndo, onRestart, onWinShown }: AntsScreenProps) {
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  /** Состояние, которое сейчас показывает рендер (отличие от state = что-то произошло). */
+  const shownRef = useRef(state);
+  /** Колонки, которые тапнули: следующий новый state — наши ходы, их анимируем по очереди. */
+  const pendingRef = useRef<AntsMove[]>([]);
+  /** Состояние после наших ходов, пока оболочка их ещё не отрисовала (быстрые тапы в одном такте). */
+  const predictedRef = useRef(state);
+  const startRef = useRef(start);
 
   /** Метка блока в каждом логическом слоте: номер установки. */
   const slotTags = useRef<number[]>(Array.from({ length: SLOT_COUNT }, () => 0));
@@ -76,7 +73,7 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
     const style = getComputedStyle(parent);
     const width = area.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const height = area.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
-    const cells = historyRef.current.snapshots[0]!.width;
+    const cells = startRef.current.width;
     const size = Math.max(cells, Math.floor(Math.min(width, height) / cells) * cells);
     picture.style.width = `${size}px`;
     picture.style.height = `${size}px`;
@@ -95,7 +92,7 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
   }, []);
 
   useLayoutEffect(() => {
-    const renderer = new AntsRenderer(canvasRef.current!, historyRef.current.snapshots[0]!, {
+    const renderer = new AntsRenderer(canvasRef.current!, shownRef.current, {
       onLeave: (slot, tag) => setSlotsView(view => antLeft(view, slot, tag)),
       onHome: (slot, tag) => setSlotsView(view => antHome(view, slot, tag)),
     });
@@ -206,8 +203,8 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
   };
 
   const onColumn = (column: number) => {
-    const before = current(historyRef.current);
-    if (isWon(before)) {
+    const before = predictedRef.current;
+    if (won) {
       return;
     }
     const result = tap(before, column);
@@ -217,44 +214,64 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
       }
       return;
     }
-    const block = before.columns[column]![0]!;
-    const tag = ++placements.current;
-    slotTags.current[result.slot] = tag;
-    fly(column, result.slot, block);
-    setSlotsView(view => placeBlock(view, result.slot, tag, block.color, block.ants));
-    // события слота принадлежат блоку, который в нём сейчас стоит
-    const events = result.events.map(event => ({ ...event, tag: slotTags.current[event.slot] ?? 0 }));
-    rendererRef.current?.play(result.state, events, FLIGHT_MS);
-    const next = push(historyRef.current, result.state);
-    historyRef.current = next;
-    setHistory(next);
-    if (isWon(result.state)) {
-      onWin();
-      rendererRef.current?.whenIdle(() => {
-        rendererRef.current?.showWin(start.pixels);
-        setCelebrating(true);
-      });
-    }
+    fly(column, result.slot, before.columns[column]![0]!);
+    pendingRef.current.push(column);
+    predictedRef.current = result.state;
+    onMove(column);
   };
 
-  const jump = (next: History<AntsState>) => {
-    historyRef.current = next;
-    setHistory(next);
-    const state = current(next);
+  // Новый state: наши ходы — анимируем по очереди (события тот же tap даст детерминированно),
+  // иначе (Undo, «заново») — мгновенно показываем как есть.
+  useLayoutEffect(() => {
+    const previous = shownRef.current;
+    if (state === previous) {
+      return;
+    }
+    shownRef.current = state;
+    predictedRef.current = state;
+    const moves = pendingRef.current;
+    pendingRef.current = [];
+    let current = previous;
+    for (const move of moves) {
+      const result = tap(current, move);
+      if (!result) {
+        break;
+      }
+      const block = current.columns[move]![0]!;
+      const tag = ++placements.current;
+      slotTags.current[result.slot] = tag;
+      setSlotsView(view => placeBlock(view, result.slot, tag, block.color, block.ants));
+      // события слота принадлежат блоку, который в нём сейчас стоит
+      const events = result.events.map(event => ({ ...event, tag: slotTags.current[event.slot] ?? 0 }));
+      rendererRef.current?.play(result.state, events, FLIGHT_MS);
+      current = result.state;
+    }
+    if (moves.length > 0 && current !== previous) {
+      return;
+    }
     // у блоков в слотах — новые метки: хвост муравьёв прошлого больше ничего не меняет
     slotTags.current = state.slots.map(slot => (slot ? ++placements.current : 0));
     setSlotsView(viewFromSlots(state.slots, slotTags.current));
     rendererRef.current?.reset(state);
-  };
+  }, [state]);
+
+  // Победа: ждём, пока муравьи добегут, показываем картинку целиком — дальше награда оболочки.
+  useEffect(() => {
+    if (!won) {
+      return;
+    }
+    rendererRef.current?.whenIdle(() => {
+      rendererRef.current?.showWin(startRef.current.pixels);
+      onWinShown();
+    });
+  }, [won, onWinShown]);
 
   // для скриншотов и ручной проверки в dev: window.__ants
   useEffect(() => {
     if (import.meta.env.DEV) {
-      Object.assign(window, { __ants: { state: () => current(historyRef.current), tap: onColumn } });
+      Object.assign(window, { __ants: { state: () => stateRef.current, tap: onColumn } });
     }
   });
-
-  const stuck = isStuck(state);
 
   return (
     <div className="ants" ref={rootRef}>
@@ -334,8 +351,8 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
           type="button"
           className="ants-restart"
           aria-label="заново"
-          disabled={won || !canUndo(history)}
-          onPointerDown={() => jump(restart(historyRef.current))}
+          disabled={won || !canUndo}
+          onPointerDown={onRestart}
         >
           <RestartIcon />
         </button>
@@ -343,18 +360,13 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
           type="button"
           className={stuck ? 'ants-undo is-pulsing' : 'ants-undo'}
           aria-label="назад"
-          disabled={won || !canUndo(history)}
-          onPointerDown={() => jump(undo(historyRef.current))}
+          disabled={won || !canUndo}
+          onPointerDown={onUndo}
         >
           <UndoIcon />
         </button>
       </div>
       <canvas className="ants-canvas" ref={canvasRef} />
-      {celebrating ? (
-        <button type="button" className="ants-win" aria-label="дальше" onPointerDown={onNext}>
-          <Confetti seed={level} />
-        </button>
-      ) : null}
     </div>
   );
 }

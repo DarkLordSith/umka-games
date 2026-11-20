@@ -2,9 +2,18 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BROKEN_KEY, type KeyValueStorage, loadProgress, PROGRESS_KEY, saveProgress } from '../src/app/storage';
-import { defaultProgress, migrate, parseProgress, PROGRESS_VERSION, withAntsLevel } from '../src/engine/progress';
+import {
+  defaultProgress,
+  gameProgress,
+  migrate,
+  parseProgress,
+  PROGRESS_VERSION,
+  withGame,
+} from '../src/engine/progress';
+import { makeLevel, pictureIndex } from '../src/games/ants/generator';
 
 const FIXTURES = join(import.meta.dirname, 'fixtures');
+const fixture = (name: string) => readFileSync(join(FIXTURES, name), 'utf8');
 
 /** Память вместо localStorage. */
 function memoryStorage(initial: Record<string, string> = {}): KeyValueStorage & { data: Record<string, string> } {
@@ -21,40 +30,66 @@ function memoryStorage(initial: Record<string, string> = {}): KeyValueStorage & 
 describe('прогресс', () => {
   it('каждая фикстура прошлых версий загружается в текущую схему', () => {
     const files = readdirSync(FIXTURES).filter(file => file.startsWith('progress-'));
-    expect(files.length).toBeGreaterThan(0);
+    expect(files).toEqual(expect.arrayContaining(['progress-v1.json', 'progress-v2.json']));
     for (const file of files) {
-      const progress = migrate(JSON.parse(readFileSync(join(FIXTURES, file), 'utf8')));
+      const progress = migrate(JSON.parse(fixture(file)));
       expect(progress.v, file).toBe(PROGRESS_VERSION);
-      expect(progress.games.ants.level, file).toBeGreaterThanOrEqual(1);
+      expect(progress.games.ants?.difficulty, file).toBeGreaterThanOrEqual(1);
     }
   });
 
-  it('v1: уровень муравьёв сохраняется', () => {
-    const text = readFileSync(join(FIXTURES, 'progress-v1.json'), 'utf8');
-    expect(loadProgress(memoryStorage({ [PROGRESS_KEY]: text })).games.ants.level).toBe(7);
+  it('v1 → v2: уровень муравьёв L — сложность L, seed L, пройдено L − 1', () => {
+    const progress = loadProgress(memoryStorage({ [PROGRESS_KEY]: fixture('progress-v1.json') }));
+    expect(progress.games.ants).toEqual({ difficulty: 7, streak: 0, won: 6, seed: 7 });
+    expect(progress.stickers).toEqual([]);
+    expect(progress.settings).toEqual({ sfx: true, voice: true });
   });
 
-  it('нет сохранения — чистый прогресс с 1-го уровня', () => {
+  it('после обновления — тот же самый уровень муравьёв, что был в v1', () => {
+    // v1 строил уровень L как makeLevel(L, L) с картинкой по номеру уровня
+    const ants = migrate(JSON.parse(fixture('progress-v1.json'))).games.ants!;
+    expect(pictureIndex(ants.seed)).toBe((7 - 1) % 10);
+    expect(makeLevel(ants.difficulty, ants.seed)).toEqual(makeLevel(7, 7));
+  });
+
+  it('v2 читается как есть', () => {
+    expect(migrate(JSON.parse(fixture('progress-v2.json')))).toEqual({
+      v: 2,
+      games: { ants: { difficulty: 12, streak: -1, won: 15, seed: 16 } },
+      stickers: [0, 1, 2, 3],
+      settings: { sfx: true, voice: false },
+    });
+  });
+
+  it('нет сохранения — чистый прогресс; игра без записи стартует со своей сложности', () => {
     expect(loadProgress(memoryStorage())).toEqual(defaultProgress());
     expect(loadProgress(null)).toEqual(defaultProgress());
+    expect(gameProgress(defaultProgress(), 'ants', 4)).toEqual({ difficulty: 4, streak: 0, won: 0, seed: 1 });
   });
 
   it('битый JSON — чистый прогресс, старое значение копируется в umka-progress-broken', () => {
-    const storage = memoryStorage({ [PROGRESS_KEY]: '{"v":1,"games":' });
+    const storage = memoryStorage({ [PROGRESS_KEY]: '{"v":2,"games":' });
     expect(loadProgress(storage)).toEqual(defaultProgress());
-    expect(storage.data[BROKEN_KEY]).toBe('{"v":1,"games":');
+    expect(storage.data[BROKEN_KEY]).toBe('{"v":2,"games":');
   });
 
   it('чужая схема или версия новее — тоже как битый', () => {
-    for (const text of ['[]', '"x"', '{"games":{}}', '{"v":99,"games":{}}']) {
+    for (const text of ['[]', '"x"', '{"games":{}}', '{"v":99,"games":{}}', '{"v":0}']) {
       expect(parseProgress(text).broken, text).toBe(true);
     }
   });
 
-  it('недостающие и неверные поля — значения по умолчанию', () => {
-    expect(migrate({ v: 1 }).games.ants.level).toBe(1);
-    expect(migrate({ v: 1, games: { ants: { level: -3 } } }).games.ants.level).toBe(1);
-    expect(migrate({ v: 1, games: { ants: { level: 2.5 } } }).games.ants.level).toBe(1);
+  it('недостающие и неверные поля — значения по умолчанию, мусор отбрасывается', () => {
+    const progress = migrate({
+      v: 2,
+      games: { ants: { difficulty: -3, streak: 'x', won: 2.5 }, junk: 5 },
+      stickers: [3, 3, -1, 'a', 7],
+      settings: { sfx: 'yes' },
+    });
+    expect(progress.games).toEqual({ ants: { difficulty: 1, streak: 0, won: 0, seed: 1 } });
+    expect(progress.stickers).toEqual([3, 7]);
+    expect(progress.settings).toEqual({ sfx: true, voice: true });
+    expect(migrate({ v: 1, games: { ants: { level: 2.5 } } }).games.ants?.difficulty).toBe(1);
   });
 
   it('хранилище бросает (приватный режим) — без падения', () => {
@@ -72,7 +107,7 @@ describe('прогресс', () => {
 
   it('сохранить и загрузить — тот же прогресс', () => {
     const storage = memoryStorage();
-    const progress = withAntsLevel(defaultProgress(), 12);
+    const progress = withGame(defaultProgress(), 'ants', { difficulty: 5, streak: 2, won: 9, seed: 10 });
     saveProgress(progress, storage);
     expect(loadProgress(storage)).toEqual(progress);
   });

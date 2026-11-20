@@ -1,0 +1,7 @@
+/* Награда за уровень: конфетти поверх экрана игры, тап в любом месте — следующий уровень. */
+.win-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: transparent;
+}

@@ -1,0 +1,6 @@
+{
+  "v": 2,
+  "games": { "ants": { "difficulty": 12, "streak": -1, "won": 15, "seed": 16 } },
+  "stickers": [0, 1, 2, 3],
+  "settings": { "sfx": true, "voice": false }
+}
