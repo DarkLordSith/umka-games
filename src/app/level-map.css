@@ -171,3 +171,13 @@
   color: var(--ink);
   box-shadow: 0 4px 0 var(--shadow);
 }
+
+/* альбом — в правом нижнем углу; сюда прилетает новая наклейка */
+.map-album {
+  position: absolute;
+  z-index: 4;
+  right: max(16px, var(--safe-right));
+  bottom: max(10px, calc(var(--safe-bottom) - 6px));
+  width: 84px;
+  height: 84px;
+}

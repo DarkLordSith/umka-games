@@ -6,10 +6,12 @@
 //   v2 — по каждой игре { difficulty, streak, won, seed }, stickers, settings { sfx, voice }
 //   v3 — по каждой игре { difficulty, streak, seed, levels: [{ difficulty, seed, variant }] };
 //        won больше не хранится: пройдено = levels.length (одно место правды)
+//   v4 — та же форма; stickers дополнены наклейками за уже пройденные уровни
+//        (1 пройденный уровень = 1 наклейка, а альбома до v4 не было)
 
 import type { LevelSpec } from './types';
 
-export const PROGRESS_VERSION = 3;
+export const PROGRESS_VERSION = 4;
 
 /** Пройденный уровень: по нему игра строит тот же уровень для переигровки. */
 export type LevelRecord = LevelSpec;
@@ -39,7 +41,7 @@ export interface Progress {
   readonly v: typeof PROGRESS_VERSION;
   /** По id игры; нет записи — игра ещё не начата. */
   readonly games: Readonly<Record<string, GameProgress>>;
-  /** Номера полученных наклеек (задача rewards). */
+  /** Номера полученных наклеек (rewards/stickers.ts) по порядку получения. */
   readonly stickers: readonly number[];
   readonly settings: Settings;
 }
@@ -62,6 +64,16 @@ export function withoutGame(progress: Progress, id: string): Progress {
   const games = { ...progress.games };
   delete games[id];
   return { ...progress, games };
+}
+
+/** Номер следующей наклейки: на 1 больше последней (номера не повторяются). */
+export function nextSticker(progress: Progress): number {
+  return progress.stickers.length === 0 ? 0 : Math.max(...progress.stickers) + 1;
+}
+
+/** Победа — новая наклейка в альбом. */
+export function withNewSticker(progress: Progress): Progress {
+  return { ...progress, stickers: [...progress.stickers, nextSticker(progress)] };
 }
 
 export function withSettings(progress: Progress, settings: Partial<Settings>): Progress {
@@ -125,6 +137,24 @@ function v2ToV3(raw: Record<string, unknown>): Record<string, unknown> {
   return { ...raw, v: 3, games };
 }
 
+/**
+ * v3 → v4: наклейки за уже пройденные уровни — 1 уровень = 1 наклейка. Номера 0…N−1,
+ * где N — пройдено во всех играх; уже полученные наклейки сохраняются.
+ */
+function v3ToV4(raw: Record<string, unknown>): Record<string, unknown> {
+  let won = 0;
+  if (isObject(raw.games)) {
+    for (const game of Object.values(raw.games)) {
+      if (isObject(game) && Array.isArray(game.levels)) {
+        won += Math.min(MAX_LEVELS, game.levels.length);
+      }
+    }
+  }
+  const had = Array.isArray(raw.stickers) ? raw.stickers.filter(item => isInt(item) && item >= 0) : [];
+  const backfill = Array.from({ length: won }, (_, index) => index).filter(id => !had.includes(id));
+  return { ...raw, v: 4, stickers: [...had, ...backfill] };
+}
+
 function sanitizeLevel(raw: unknown): LevelRecord | null {
   if (!isObject(raw) || !isInt(raw.seed)) {
     return null;
@@ -182,6 +212,7 @@ function sanitize(raw: Record<string, unknown>): Progress {
 const STEPS: Readonly<Record<number, (raw: Record<string, unknown>) => Record<string, unknown>>> = {
   1: v1ToV2,
   2: v2ToV3,
+  3: v3ToV4,
 };
 
 /**

@@ -7,9 +7,11 @@ import {
   gameProgress,
   levelsWon,
   migrate,
+  nextSticker,
   parseProgress,
   PROGRESS_VERSION,
   withGame,
+  withNewSticker,
   withoutGame,
   withSettings,
 } from '../src/engine/progress';
@@ -33,7 +35,9 @@ function memoryStorage(initial: Record<string, string> = {}): KeyValueStorage & 
 describe('прогресс', () => {
   it('каждая фикстура прошлых версий загружается в текущую схему', () => {
     const files = readdirSync(FIXTURES).filter(file => file.startsWith('progress-'));
-    expect(files).toEqual(expect.arrayContaining(['progress-v1.json', 'progress-v2.json', 'progress-v3.json']));
+    expect(files).toEqual(
+      expect.arrayContaining(['progress-v1.json', 'progress-v2.json', 'progress-v3.json', 'progress-v4.json']),
+    );
     for (const file of files) {
       const progress = migrate(JSON.parse(fixture(file)));
       expect(progress.v, file).toBe(PROGRESS_VERSION);
@@ -41,16 +45,16 @@ describe('прогресс', () => {
     }
   });
 
-  it('v1 → v3: уровень муравьёв L — сложность L, seed L, пройдено L − 1', () => {
+  it('v1 → v4: уровень муравьёв L — сложность L, seed L, пройдено L − 1', () => {
     const progress = loadProgress(memoryStorage({ [PROGRESS_KEY]: fixture('progress-v1.json') }));
     const ants = progress.games.ants!;
     expect(ants).toMatchObject({ difficulty: 7, streak: 0, seed: 7 });
     expect(levelsWon(ants)).toBe(6);
-    expect(progress.stickers).toEqual([]);
+    expect(progress.stickers).toEqual([0, 1, 2, 3, 4, 5]); // наклейка за каждый пройденный
     expect(progress.settings).toEqual({ sfx: true, voice: true });
   });
 
-  it('v2 → v3: номер текущей точки = прежний уровень, история восстановлена приближённо', () => {
+  it('v2 → v4: номер текущей точки = прежний уровень, история восстановлена приближённо', () => {
     const progress = migrate(JSON.parse(fixture('progress-v2.json')));
     const ants = progress.games.ants!;
     expect(ants).toMatchObject({ difficulty: 12, streak: -1, seed: 16 });
@@ -61,12 +65,30 @@ describe('прогресс', () => {
     expect(ants.levels[6]).toEqual({ difficulty: 7, seed: 7, variant: 'cat' });
     expect(ants.levels[10]).toEqual({ difficulty: 11, seed: 11, variant: 'apple' });
     expect(ants.levels[14]).toEqual({ difficulty: 12, seed: 15, variant: 'mushroom' });
-    expect(progress.stickers).toEqual([0, 1, 2, 3]);
+    // 4 наклейки уже были, остальные 11 — за пройденные уровни
+    expect(progress.stickers).toEqual(Array.from({ length: 15 }, (_, index) => index));
     expect(progress.settings).toEqual({ sfx: true, voice: false });
   });
 
-  it('v3 читается как есть', () => {
-    expect(migrate(JSON.parse(fixture('progress-v3.json')))).toEqual(JSON.parse(fixture('progress-v3.json')));
+  it('v3 → v4: наклеек не меньше, чем пройдено уровней; полученные сохраняются', () => {
+    const v3 = JSON.parse(fixture('progress-v3.json'));
+    expect(migrate(v3)).toEqual({ ...v3, v: 4 }); // 3 уровня и 3 наклейки — уже ровно
+    const fewer = migrate({ ...v3, stickers: [7] });
+    expect(fewer.stickers).toEqual([7, 0, 1, 2]);
+  });
+
+  it('v4 читается как есть', () => {
+    expect(migrate(JSON.parse(fixture('progress-v4.json')))).toEqual(JSON.parse(fixture('progress-v4.json')));
+  });
+
+  it('новая наклейка — следующий номер, номера не повторяются', () => {
+    expect(nextSticker(defaultProgress())).toBe(0);
+    let progress = defaultProgress();
+    for (let i = 0; i < 10; i++) {
+      progress = withNewSticker(progress);
+    }
+    expect(progress.stickers).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(nextSticker({ ...progress, stickers: [3, 9, 4] })).toBe(10);
   });
 
   it('пройденный уровень открывается тем же самым, даже если его картинки уже нет', () => {
@@ -96,7 +118,7 @@ describe('прогресс', () => {
 
   it('недостающие и неверные поля — значения по умолчанию, мусор отбрасывается', () => {
     const progress = migrate({
-      v: 3,
+      v: 4,
       games: { ants: { difficulty: -3, streak: 'x', levels: [{ seed: 2, difficulty: 0 }, 'x', { difficulty: 3 }] }, junk: 5 },
       stickers: [3, 3, -1, 'a', 7],
       settings: { sfx: 'yes' },
