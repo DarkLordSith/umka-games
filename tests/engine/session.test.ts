@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   levelResult,
+  sessionCanRestart,
   sessionCanUndo,
   sessionHint,
   sessionMove,
@@ -35,6 +36,18 @@ describe('сессия уровня', () => {
     expect(sessionStart(session)).toBe(0);
   });
 
+  it('«заново» отменяется: ход → ход → «заново» → Undo = после двух ходов', () => {
+    let session = sessionMove(rules, sessionMove(rules, startSession(0), 3)!, 4)!;
+    session = sessionRestart(session);
+    expect(sessionState(session)).toBe(0);
+    expect(session.moves).toBe(2); // ходы не обнуляются
+    expect(sessionCanRestart(session)).toBe(false); // уже на старте
+    expect(sessionCanUndo(session)).toBe(true);
+    session = sessionUndo(session);
+    expect(sessionState(session)).toBe(7);
+    expect(session.stuckSeen).toBe(true); // «был тупик» не стирается
+  });
+
   it('невозможный ход и ход после победы — null', () => {
     const session = startSession(0);
     expect(sessionMove(rules, session, -1)).toBeNull();
@@ -53,7 +66,35 @@ describe('сессия уровня', () => {
     expect(session.stuckSeen).toBe(true);
     session = sessionMove(rules, sessionUndo(session), 10)!;
     expect(levelResult(session).clean).toBe(false);
-    const hinted = sessionMove(rules, sessionHint(startSession(0)), 10)!;
+  });
+
+  it('подсказка засчитана, если следующий ход — подсказанный', () => {
+    const hinted = sessionMove(rules, sessionHint(startSession(0), 10), 10)!;
     expect(levelResult(hinted)).toMatchObject({ hints: 1, clean: false });
+  });
+
+  it('проигнорированная подсказка не засчитывается', () => {
+    // отвлёкся, потом сам сходил иначе
+    let session = sessionMove(rules, sessionHint(startSession(0), 5), 3)!;
+    expect(session.hints).toBe(0);
+    // подсказка уже снята: совпадение позже не считается
+    session = sessionMove(rules, sessionMove(rules, session, 5)!, 2)!;
+    expect(levelResult(session)).toMatchObject({ hints: 0, clean: true });
+  });
+
+  it('Undo и «заново» снимают подсказку', () => {
+    const shown = sessionHint(sessionMove(rules, startSession(0), 1)!, 9);
+    expect(sessionMove(rules, sessionUndo(shown), 9)!.hints).toBe(0);
+    expect(sessionMove(rules, sessionRestart(shown), 9)!.hints).toBe(0);
+  });
+
+  it('ходы-объекты сравниваются по значению', () => {
+    const objectRules: GameRules<number, { add: number }> = {
+      applyMove: (state, move) => state + move.add,
+      isWon: state => state >= 10,
+      isStuck: () => false,
+    };
+    const session = sessionMove(objectRules, sessionHint(startSession(0), { add: 2 }), { add: 2 })!;
+    expect(session.hints).toBe(1);
   });
 });

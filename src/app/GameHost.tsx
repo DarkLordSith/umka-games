@@ -9,6 +9,7 @@ import { gameProgress, type Progress, withGame } from '../engine/progress';
 import {
   levelResult,
   type Session,
+  sessionCanRestart,
   sessionCanUndo,
   sessionHint,
   sessionMove,
@@ -108,6 +109,8 @@ function LevelPlayer({ game, level, progress, onProgress, onNext, onExit }: Leve
 
   // Подсказка: HINT_DELAY_MS без изменений состояния → ход решателя, рука показывает.
   // Любой ход, Undo или «заново» — рука исчезает, отсчёт заново. В тупике руки нет — пульсирует Undo.
+  // Засчитывается подсказка (уровень «трудный») только если следующий ход — подсказанный:
+  // ребёнок мог просто отвлечься.
   useEffect(() => {
     setHint(null);
     if (won || stuck) {
@@ -116,7 +119,7 @@ function LevelPlayer({ game, level, progress, onProgress, onNext, onExit }: Leve
     const timer = window.setTimeout(() => {
       const move = game.hint(sessionState(sessionRef.current));
       if (move !== null) {
-        update(sessionHint(sessionRef.current));
+        update(sessionHint(sessionRef.current, move));
         setHint(move);
       }
     }, hintDelay());
@@ -151,6 +154,7 @@ function LevelPlayer({ game, level, progress, onProgress, onNext, onExit }: Leve
 
   const onWinShown = useCallback(() => setCelebrating(true), []);
   const canUndo = sessionCanUndo(session) && !won;
+  const canRestart = sessionCanRestart(session) && !won;
   const Screen = game.Screen;
 
   return (
@@ -164,7 +168,7 @@ function LevelPlayer({ game, level, progress, onProgress, onNext, onExit }: Leve
           type="button"
           className="chrome-restart"
           aria-label="заново"
-          disabled={!canUndo}
+          disabled={!canRestart}
           onPointerDown={() => update(sessionRestart(sessionRef.current))}
         >
           <RestartIcon />

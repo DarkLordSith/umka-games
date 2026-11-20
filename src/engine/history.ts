@@ -27,7 +27,16 @@ export function undo<S>(history: History<S>): History<S> {
   return canUndo(history) ? { snapshots: history.snapshots.slice(0, -1) } : history;
 }
 
-/** «Заново»: только стартовый снимок. */
+/** Уже на старте (сразу после начала или после «заново») — «заново» ничего не даст. */
+export function atStart<S>(history: History<S>): boolean {
+  return current(history) === history.snapshots[0];
+}
+
+/**
+ * «Заново» — обычный шаг истории: стартовый снимок кладётся поверх, и Undo
+ * возвращает к состоянию до «заново» (случайный тап не стирает уровень).
+ * Уже на старте — та же история, чтобы не копить пустые шаги.
+ */
 export function restart<S>(history: History<S>): History<S> {
-  return { snapshots: [history.snapshots[0]!] };
+  return atStart(history) ? history : push(history, history.snapshots[0]!);
 }
