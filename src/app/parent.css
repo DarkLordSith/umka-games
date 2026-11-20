@@ -1,0 +1,89 @@
+.parent {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: var(--top-zone) minmax(0, 1fr);
+}
+
+/* текст здесь можно: родительский экран — единственное место; прокрутка разрешена */
+.parent-body {
+  overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-user-select: text;
+  user-select: text;
+  padding: 16px max(18px, var(--safe-right)) max(24px, var(--safe-bottom)) max(18px, var(--safe-left));
+  font-size: 17px;
+}
+
+.parent-body h1 {
+  font-size: 26px;
+  margin: 4px 0 16px;
+}
+
+.parent-card {
+  background: var(--white);
+  border-radius: 20px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 0 var(--shadow);
+}
+
+.parent-card h2 {
+  font-size: 15px;
+  margin: 0 0 8px;
+  opacity: 0.7;
+}
+
+.parent-switch {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 48px;
+}
+
+.parent-switch input {
+  width: 26px;
+  height: 26px;
+  accent-color: var(--sky);
+}
+
+.parent-game {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.parent-game-icon {
+  flex: none;
+  width: 56px;
+  height: 56px;
+}
+
+.parent-game-stats {
+  flex: 1;
+  font-size: 15px;
+}
+
+.parent-button {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 14px;
+  background: var(--panel);
+  font-weight: 700;
+}
+
+.parent-button.is-danger {
+  background: var(--game-red);
+  color: var(--white);
+}
+
+.parent-button.is-wide {
+  width: 100%;
+  min-height: 52px;
+}
+
+.parent-version {
+  font-size: 13px;
+  opacity: 0.6;
+  text-align: center;
+}

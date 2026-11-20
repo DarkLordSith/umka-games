@@ -1,7 +1,9 @@
 import { lazy, Suspense, useCallback, useState } from 'react';
 import type { Progress } from '../engine/progress';
-import { GAMES } from '../games/registry';
+import { findGame } from '../games/registry';
 import { GameHost } from './GameHost';
+import { Menu } from './Menu';
+import { ParentScreen } from './ParentScreen';
 import { loadProgress, saveProgress } from './storage';
 
 /** Превью для отбраковки (только dev): ?dev=ants. В production-сборку не попадает. */
@@ -22,17 +24,22 @@ function devLevel(): number | null {
   return Number.isInteger(value) && value >= 1 ? value : null;
 }
 
+type View = { readonly kind: 'menu' } | { readonly kind: 'game'; readonly id: string } | { readonly kind: 'parent' };
+
 /**
- * Оболочка. Пока одна игра — открываемся сразу в ней (меню — задача 5).
- * Только оболочка трогает хранилище: победа сохраняется сразу, ещё до награды,
+ * Оболочка: решает, какой экран показан (меню → игра → меню, родительский экран).
+ * Только она трогает хранилище: победа сохраняется сразу, ещё до награды,
  * чтобы закрытое на конфетти приложение открылось уже на следующем уровне.
  */
 export function App() {
   const [progress, setProgress] = useState<Progress>(loadProgress);
+  // в dev ?level=N сразу открывает муравьёв на этом уровне
+  const [view, setView] = useState<View>(() => (devLevel() ? { kind: 'game', id: 'ants' } : { kind: 'menu' }));
   const onProgress = useCallback((next: Progress) => {
     saveProgress(next);
     setProgress(next);
   }, []);
+  const toMenu = useCallback(() => setView({ kind: 'menu' }), []);
 
   if (AntsPreview && devPage() === 'ants') {
     return (
@@ -42,5 +49,14 @@ export function App() {
     );
   }
 
-  return <GameHost game={GAMES[0]!} progress={progress} onProgress={onProgress} devLevel={devLevel()} />;
+  if (view.kind === 'parent') {
+    return <ParentScreen progress={progress} onProgress={onProgress} onBack={toMenu} />;
+  }
+
+  const game = view.kind === 'game' ? findGame(view.id) : undefined;
+  if (game) {
+    return <GameHost game={game} progress={progress} onProgress={onProgress} onExit={toMenu} devLevel={devLevel()} />;
+  }
+
+  return <Menu onPlay={id => setView({ kind: 'game', id })} onParent={() => setView({ kind: 'parent' })} />;
 }

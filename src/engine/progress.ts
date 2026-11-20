@@ -45,6 +45,17 @@ export function withGame(progress: Progress, id: string, game: GameProgress): Pr
   return { ...progress, games: { ...progress.games, [id]: game } };
 }
 
+/** Сброс прогресса одной игры (родительский экран): она начнётся заново со своей стартовой сложности. */
+export function withoutGame(progress: Progress, id: string): Progress {
+  const games = { ...progress.games };
+  delete games[id];
+  return { ...progress, games };
+}
+
+export function withSettings(progress: Progress, settings: Partial<Settings>): Progress {
+  return { ...progress, settings: { ...progress.settings, ...settings } };
+}
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 

@@ -1,0 +1,46 @@
+.long-press {
+  position: relative;
+}
+
+/* зона касания не меньше 60 pt */
+.long-press::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+.long-press-face {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* кольцо-прогресс: пустое, пока не держат; заполняется за --hold */
+.long-press-ring {
+  position: absolute;
+  inset: -7px;
+  width: calc(100% + 14px);
+  height: calc(100% + 14px);
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.long-press-ring circle {
+  fill: none;
+  stroke: var(--game-yellow);
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  transition: stroke-dashoffset 0.2s ease-out;
+}
+
+.long-press.is-pressing .long-press-ring circle {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset var(--hold, 1000ms) linear;
+}
+
+.long-press.is-pressing .long-press-face {
+  transform: scale(0.92);
+  transition: transform 0.15s ease-out;
+}
