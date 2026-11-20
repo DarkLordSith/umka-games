@@ -2,13 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { DOWN_AFTER_STRUGGLE, nextDifficulty, UP_AFTER_CLEAN } from '../../src/engine/difficulty';
 
 describe('адаптивная сложность', () => {
-  it(`${UP_AFTER_CLEAN} чистые победы подряд → +1, серия сбрасывается`, () => {
+  it('каждая чистая победа → +1, серия не копится', () => {
+    expect(UP_AFTER_CLEAN).toBe(1);
     let state = { difficulty: 5, streak: 0 };
-    for (let i = 1; i < UP_AFTER_CLEAN; i++) {
-      state = nextDifficulty(state, true, 1);
-      expect(state).toEqual({ difficulty: 5, streak: i });
-    }
-    expect(nextDifficulty(state, true, 1)).toEqual({ difficulty: 6, streak: 0 });
+    state = nextDifficulty(state, true, 1);
+    expect(state).toEqual({ difficulty: 6, streak: 0 });
+    expect(nextDifficulty(state, true, 1)).toEqual({ difficulty: 7, streak: 0 });
   });
 
   it(`${DOWN_AFTER_STRUGGLE} трудных уровня подряд → −1`, () => {
@@ -17,9 +16,13 @@ describe('адаптивная сложность', () => {
     expect(nextDifficulty(once, false, 1)).toEqual({ difficulty: 4, streak: 0 });
   });
 
-  it('трудный уровень обрывает серию чистых, чистый — серию трудных', () => {
+  it('трудный уровень сбрасывает счётчик чистых, чистый — счётчик трудных', () => {
     expect(nextDifficulty({ difficulty: 5, streak: 2 }, false, 1)).toEqual({ difficulty: 5, streak: -1 });
-    expect(nextDifficulty({ difficulty: 5, streak: -1 }, true, 1)).toEqual({ difficulty: 5, streak: 1 });
+    // после одного трудного чистая победа сразу даёт +1 и обнуляет счётчик трудных
+    expect(nextDifficulty({ difficulty: 5, streak: -1 }, true, 1)).toEqual({ difficulty: 6, streak: 0 });
+    // трудный → чистый → трудный: снова только −1 в серии, не −2
+    const mixed = nextDifficulty(nextDifficulty({ difficulty: 5, streak: -1 }, true, 1), false, 1);
+    expect(mixed).toEqual({ difficulty: 6, streak: -1 });
   });
 
   it('не ниже минимума', () => {
