@@ -18,8 +18,8 @@ export type AntsScreenProps = GameScreenProps<AntsState, AntsMove>;
 
 /** Полёт блока из колонки в слот, мс. Муравьи стартуют после него. */
 const FLIGHT_MS = 240;
-/** Сколько блоков колонки рендерим: 3 видно, 4-й ждёт за верхом нижней полосы. */
-const STACK_RENDERED = 4;
+/** Сколько блоков колонки рендерим: 3 видно целиком, 4-й растворяется в «тумане», 5-й ждёт ниже. */
+const STACK_RENDERED = 5;
 /** Выезд колонки вверх, когда забрали верхний блок, мс. */
 const STACK_SLIDE_MS = 220;
 
@@ -81,7 +81,6 @@ export function AntsScreen({ state, start, won, stuck, canUndo, onMove, onUndo, 
     const layout: Layout = {
       picture: relativeRect(picture, root),
       hole: { x: holeRect.x + holeRect.w / 2, y: holeRect.y + holeRect.h / 2 },
-      holeSize: { w: holeRect.w, h: holeRect.h },
       slots: slotRefs.current.map(slot => {
         const rect = slot ? relativeRect(slot, root) : holeRect;
         return { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
@@ -98,8 +97,14 @@ export function AntsScreen({ state, start, won, stuck, canUndo, onMove, onUndo, 
     });
     rendererRef.current = renderer;
     measure();
+    // Раскладка может сдвинуться без изменения размера экрана: на iPhone-PWA
+    // env(safe-area-inset-bottom) приходит ПОСЛЕ первой раскладки, нижний ряд растёт,
+    // а муравейник и слоты едут вверх. Поэтому следим за каждым рядом, а не только за корнем.
     const observer = new ResizeObserver(measure);
     observer.observe(rootRef.current!);
+    for (const row of rootRef.current!.children) {
+      observer.observe(row);
+    }
     return () => {
       observer.disconnect();
       renderer.destroy();
@@ -207,6 +212,8 @@ export function AntsScreen({ state, start, won, stuck, canUndo, onMove, onUndo, 
     if (won) {
       return;
     }
+    // координаты для муравьёв — свежие из DOM перед каждым ходом (одно место правды)
+    measure();
     const result = tap(before, column);
     if (!result) {
       if ((before.columns[column]?.length ?? 0) > 0) {
@@ -269,7 +276,9 @@ export function AntsScreen({ state, start, won, stuck, canUndo, onMove, onUndo, 
   // для скриншотов и ручной проверки в dev: window.__ants
   useEffect(() => {
     if (import.meta.env.DEV) {
-      Object.assign(window, { __ants: { state: () => stateRef.current, tap: onColumn } });
+      Object.assign(window, {
+        __ants: { state: () => stateRef.current, tap: onColumn, layout: () => rendererRef.current?.currentLayout },
+      });
     }
   });
 
@@ -345,8 +354,10 @@ export function AntsScreen({ state, start, won, stuck, canUndo, onMove, onUndo, 
             </div>
           ))}
         </div>
-      {/* нижняя полоса: стопки уходят за её верх; «заново» — в левом углу, Undo — в правом */}
-      <div className="ants-bar">
+      {/* низ без подложки: стопки ниже 3-го ряда растворяются в «тумане»;
+          «заново» — в левом нижнем углу, Undo — в правом, прижаты к safe-area */}
+      <div className="ants-buttons">
+        <div className="ants-fog" aria-hidden="true" />
         <button
           type="button"
           className="ants-restart"

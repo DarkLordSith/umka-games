@@ -10,7 +10,7 @@
 // к муравейнику, к краю картинки, дальше по пустым клеткам и полю вокруг
 // картинки, не сквозь несъеденные пиксели. Путь считается в момент выхода
 // муравья (к пикселю) и в момент, когда он его взял (обратно).
-import { GAME_COLORS, SHADOW, UI_COLORS } from '../../ui/palette';
+import { GAME_COLORS, UI_COLORS } from '../../ui/palette';
 import { type AntsState, EMPTY, type EatEvent } from './logic';
 import { AntAtlas, directionOf, WALK_CYCLE } from './antSprite';
 import { type Cell, corners, gridPath } from './paths';
@@ -38,8 +38,6 @@ export interface Layout {
   readonly picture: Rect;
   /** Центр дырки-муравейника. */
   readonly hole: Point;
-  /** Место под дырку в раскладке: дырка рисуется внутри и не наезжает на слоты. */
-  readonly holeSize: { readonly w: number; readonly h: number };
   readonly slots: readonly Point[];
 }
 
@@ -147,6 +145,11 @@ export class AntsRenderer {
       this.atlas = new AntAtlas(length, ratio);
     }
     this.request();
+  }
+
+  /** Текущая раскладка (для проверок в dev). */
+  get currentLayout(): Layout | null {
+    return this.layout;
   }
 
   /** Мгновенно показать состояние (Undo, «заново», новый уровень): муравьи исчезают. */
@@ -312,7 +315,6 @@ export class AntsRenderer {
     } else {
       this.drawPixels();
     }
-    this.drawHole();
     for (const ant of this.ants) {
       this.drawAnt(ant, time);
     }
@@ -379,22 +381,6 @@ export class AntsRenderer {
       }
     });
     this.context.globalAlpha = 1;
-  }
-
-  private drawHole(): void {
-    const { hole, holeSize } = this.layout!;
-    // тень-бортик во всё место, тёмная дырка — внутри; ничего не выходит за место в раскладке
-    const rx = holeSize.w / 2;
-    const ry = holeSize.h / 2;
-    const context = this.context;
-    context.fillStyle = SHADOW;
-    context.beginPath();
-    context.ellipse(hole.x, hole.y, rx, ry, 0, 0, Math.PI * 2);
-    context.fill();
-    context.fillStyle = UI_COLORS.ink;
-    context.beginPath();
-    context.ellipse(hole.x, hole.y - ry * 0.12, rx * 0.76, ry * 0.68, 0, 0, Math.PI * 2);
-    context.fill();
   }
 
   private drawAnt(ant: Ant, time: number): void {

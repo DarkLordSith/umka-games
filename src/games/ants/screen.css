@@ -9,12 +9,12 @@
   --column: min(72px, calc((100vw - 32px - var(--gap) * 3) / 4));
   /* высота блока от высоты экрана: 50 на SE, до 60 на больших; верхний + запас 5px = цель ≥ 60 pt */
   --block-h: clamp(50px, calc(100vh * 0.075), 60px);
-  /* нижняя полоса с «заново» и Undo */
-  --bar: 84px;
+  /* зона кнопок: Undo 74 + зазор сверху; прижата к safe-area снизу */
+  --buttons: calc(74px + 8px + max(6px, var(--safe-bottom)));
   position: absolute;
   inset: 0;
   display: grid;
-  /* фон | картинка | муравейник и слоты | стопки (3 ряда) | нижняя полоса */
+  /* фон | картинка | муравейник и слоты | стопки (3 ряда) | зона кнопок («туман») */
   grid-template-rows: var(--top-zone) minmax(0, 1fr) auto auto auto;
   /* без этого колонка grid растёт под ширину картинки и картинка раздувается по кругу */
   grid-template-columns: minmax(0, 1fr);
@@ -40,7 +40,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 14px max(20px, var(--safe-right)) 8px max(20px, var(--safe-left));
+  padding: 8px max(20px, var(--safe-right)) 6px max(20px, var(--safe-left));
 }
 
 .ants-picture {
@@ -58,9 +58,22 @@
   padding: 0 16px;
 }
 
+/* Дырка — DOM, а не canvas: она всегда там же, где её место в раскладке (между картинкой
+   и слотами), как бы ни сдвинулись ряды. Муравьи берут её координаты отсюда же. */
 .ants-hole {
+  position: relative;
   width: 64px;
   height: 22px;
+  border-radius: 50%;
+  background: var(--shadow);
+}
+
+.ants-hole::after {
+  content: '';
+  position: absolute;
+  inset: 2px 8px 5px;
+  border-radius: 50%;
+  background: var(--ink);
 }
 
 .ants-slots {
@@ -101,17 +114,16 @@
   }
 }
 
-/* --- стопки: по центру, видно ровно 3 ряда; дальше блоки уходят за верх нижней полосы --- */
+/* --- стопки: по центру, видно ровно 3 ряда; дальше блоки уходят в «туман» над кнопками --- */
 
 .ants-columns {
   display: flex;
   justify-content: center;
   gap: var(--gap);
-  /* отступ сверху + 3 ряда + зазор под верхним рядом (top-gap + gap) + зазор в очереди */
-  height: calc(10px + var(--block-h) * 3 + var(--top-gap) + var(--gap) * 2);
-  padding: 10px 16px 0;
-  /* обрезаем только снизу: подпрыгивание верхнего блока вверх не режется */
-  clip-path: inset(-60px -60px 0 -60px);
+  /* отступ сверху + 3 ряда + зазор под верхним рядом (top-gap + gap) + зазор в очереди;
+     4-й ряд и ниже выходят за этот ряд grid — в зону кнопок, под «туман» */
+  height: calc(8px + var(--block-h) * 3 + var(--top-gap) + var(--gap) * 2);
+  padding: 8px 16px 0;
 }
 
 .ants-column {
@@ -189,19 +201,35 @@
   font-size: 23px;
 }
 
-.ants-bar {
+/* Низ без подложки: только общий фон. «Туман» растворяет 4-й ряд стопок и ниже,
+   кнопки — поверх него в нижних углах, прижаты к safe-area. */
+.ants-buttons {
   position: relative;
   z-index: 1;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: calc(var(--bar) + var(--safe-bottom));
-  padding: 0 max(14px, var(--safe-right)) var(--safe-bottom) max(14px, var(--safe-left));
-  /* «земля» — зеркало верхней полосы: блоки стопок уходят под неё */
-  background: var(--panel);
-  border-top-left-radius: 28px;
-  border-top-right-radius: 28px;
-  box-shadow: 0 -4px 0 var(--shadow);
+  height: var(--buttons);
+}
+
+.ants-fog {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to bottom, var(--bg-clear) 0, var(--bg) 44px);
+}
+
+.ants-restart,
+.ants-undo {
+  position: absolute;
+  z-index: 1;
+}
+
+.ants-restart {
+  left: max(14px, var(--safe-left));
+  bottom: max(6px, var(--safe-bottom));
+}
+
+.ants-undo {
+  right: max(14px, var(--safe-right));
+  bottom: max(6px, var(--safe-bottom));
 }
 
 .ants-undo {
@@ -229,12 +257,11 @@
 }
 
 .ants-restart {
-  position: relative;
   width: 44px;
   height: 44px;
   padding: 9px;
   border-radius: 50%;
-  background: var(--bg);
+  background: var(--panel);
   color: var(--ink);
 }
 
@@ -245,9 +272,10 @@
   inset: -8px;
 }
 
-.ants-undo:disabled,
-.ants-restart:disabled {
-  opacity: 0.4;
+/* неактивные кнопки остаются непрозрачными (под ними — растворяющийся 4-й ряд), бледнеет иконка */
+.ants-undo:disabled svg,
+.ants-restart:disabled svg {
+  opacity: 0.35;
 }
 
 /* --- полёт блока в слот --- */

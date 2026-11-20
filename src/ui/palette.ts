@@ -36,6 +36,9 @@ export const UI_COLORS = {
 /** Тень — цвет ink с прозрачностью. */
 export const SHADOW = 'rgba(59, 35, 72, 0.22)';
 
+/** Фон с нулевой прозрачностью — начало градиента к фону (просто transparent в Safari даёт серую полосу). */
+export const BG_CLEAR = 'rgba(255, 243, 220, 0)';
+
 /** Цвет статус-бара Android/Chrome и фон splash-экрана PWA. */
 export const THEME_COLOR = UI_COLORS.bg;
 
@@ -44,6 +47,7 @@ export const CSS_TOKENS: Readonly<Record<string, string>> = {
   ...Object.fromEntries(Object.entries(UI_COLORS).map(([name, hex]) => [`--${name}`, hex])),
   ...Object.fromEntries(GAME_COLORS.map(({ id, hex }) => [`--game-${id}`, hex])),
   '--shadow': SHADOW,
+  '--bg-clear': BG_CLEAR,
 };
 
 /** `:root { --bg: …; }` — vite.config.ts вставляет это правило прямо в index.html. */

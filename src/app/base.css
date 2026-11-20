@@ -1,9 +1,12 @@
 /* Базовые стили оболочки. Цвета — только var(--…) из src/ui/palette.ts. */
 
 :root {
-  /* Верхняя зона: в PWA iOS она размыта под статус-баром. Там только фон и декор. */
-  --top-zone: max(80px, calc(env(safe-area-inset-top, 0px) + 32px));
+  /* safe-area — только через эти переменные (env() в одном месте): в тестах их подменяют,
+     чтобы эмулировать iPhone-PWA (сверху 47, снизу 34) и «позднее» значение env() на устройстве */
+  --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* Верхняя зона: в PWA iOS она размыта под статус-баром. Там только фон и декор. */
+  --top-zone: max(80px, calc(var(--safe-top) + 32px));
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   /* минимальная цель касания из CLAUDE.md */
