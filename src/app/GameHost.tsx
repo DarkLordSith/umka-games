@@ -5,6 +5,7 @@
 // домик (на карту долгим нажатием 1 с) и «заново» — слева, Undo — справа.
 // Победа: конфетти, потом крупная «Дальше» (▶) — на карту.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAudio } from '../audio/useAudio';
 import type { LevelSpec } from '../engine/types';
 import { nextDifficulty } from '../engine/difficulty';
 import { gameProgress, type Progress, withGame } from '../engine/progress';
@@ -81,6 +82,16 @@ export function GameHost({ game, play, progress, onProgress, onExit, onDone }: G
   const state = sessionState(session);
   const won = game.isWon(state);
   const stuck = game.isStuck(state);
+  const audio = useAudio();
+
+  // тупик: голос «Давай попробуем назад» — один раз за уровень (дальше хватает пульса Undo)
+  const stuckSaid = useRef(false);
+  useEffect(() => {
+    if (stuck && !won && !stuckSaid.current) {
+      stuckSaid.current = true;
+      audio.say('stuck-back');
+    }
+  }, [stuck, won, audio]);
 
   // Подсказка: HINT_DELAY_MS без изменений состояния → ход решателя, рука показывает.
   // Любой ход, Undo или «заново» — рука исчезает, отсчёт заново. В тупике руки нет — пульсирует Undo.
@@ -96,10 +107,11 @@ export function GameHost({ game, play, progress, onProgress, onExit, onDone }: G
       if (move !== null) {
         update(sessionHint(sessionRef.current, move));
         setHint(move);
+        audio.sayFrom('hint');
       }
     }, hintDelay());
     return () => window.clearTimeout(timer);
-  }, [state, won, stuck, game]);
+  }, [state, won, stuck, game, audio]);
 
   /**
    * Уровень пройден: сразу, ещё до награды, сохраняются запись уровня (для карты
@@ -133,7 +145,12 @@ export function GameHost({ game, play, progress, onProgress, onExit, onDone }: G
     return true;
   };
 
-  const onWinShown = useCallback(() => setCelebrating(true), []);
+  // победа: арпеджио и похвала — вместе с конфетти
+  const onWinShown = useCallback(() => {
+    setCelebrating(true);
+    audio.sfx.win();
+    audio.sayFrom('praise');
+  }, [audio]);
   const canUndo = sessionCanUndo(session) && !won;
   const canRestart = sessionCanRestart(session) && !won;
   const Screen = game.Screen;

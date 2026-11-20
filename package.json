@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tests/tsconfig.json",
-    "icons": "node scripts/icons.ts"
+    "icons": "node scripts/icons.ts",
+    "voice:import": "node scripts/voice-import.ts",
+    "voice:placeholder": "node scripts/voice-placeholder.ts"
   },
   "dependencies": {
     "react": "19.3.1",
