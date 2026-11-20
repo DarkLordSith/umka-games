@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canUndo, createHistory, current, push, restart, undo } from '../../src/engine/history';
+import { atStart, canUndo, createHistory, current, push, restart, undo } from '../../src/engine/history';
 
 describe('history', () => {
   it('push — новый снимок текущий, старая история не меняется', () => {
@@ -21,9 +21,18 @@ describe('history', () => {
     expect(undo(history)).toBe(history);
   });
 
-  it('restart — только стартовый снимок', () => {
+  it('restart — старт поверх истории, Undo возвращает назад', () => {
     const history = restart(push(push(createHistory('s'), 'x'), 'y'));
-    expect(history.snapshots).toEqual(['s']);
-    expect(canUndo(history)).toBe(false);
+    expect(history.snapshots).toEqual(['s', 'x', 'y', 's']);
+    expect(current(history)).toBe('s');
+    expect(atStart(history)).toBe(true);
+    expect(current(undo(history))).toBe('y');
+  });
+
+  it('restart на старте — та же история', () => {
+    const fresh = createHistory('s');
+    expect(restart(fresh)).toBe(fresh);
+    const twice = restart(push(fresh, 'x'));
+    expect(restart(twice)).toBe(twice);
   });
 });
