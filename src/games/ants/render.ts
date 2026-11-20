@@ -12,6 +12,7 @@
 // муравья (к пикселю) и в момент, когда он его взял (обратно).
 import { GAME_COLORS, SHADOW, UI_COLORS } from '../../ui/palette';
 import { type AntsState, EMPTY, type EatEvent } from './logic';
+import { AntAtlas, directionOf, WALK_CYCLE } from './antSprite';
 import { type Cell, corners, gridPath } from './paths';
 
 // ---- скорость: подкручивать здесь ----
@@ -68,10 +69,11 @@ interface Ant {
   start: number;
 }
 
-// Пиксельный муравей 8×5, голова справа: x — тело цвета блока, a — тёмные усики, глаз и ножки.
-// Две раскладки ног чередуются — «шаг». (Мультяшный муравей — задача 3б.)
-const ANT_BODY = ['......a.', '.xx...xa', 'xxxxxxxx', '.xx.x.xx'];
-const ANT_LEGS = ['a.a.a.a.', '.a.a.a.a'];
+/** Длина муравья в клетках картинки и минимум в CSS px (чтобы мордочку было видно на SE). */
+export const ANT_LENGTH_CELLS = 1.5;
+export const ANT_MIN_LENGTH = 20;
+/** Смена кадра ходьбы, мс. */
+export const ANT_STEP_MS = 110;
 
 const color = (index: number): string => GAME_COLORS[index]?.hex ?? UI_COLORS.ink;
 
@@ -109,6 +111,8 @@ export class AntsRenderer {
   /** Победа: показываем исходную картинку и подпрыгиваем. */
   private win: { readonly pixels: readonly number[]; readonly start: number } | null = null;
   private idle: (() => void) | null = null;
+  /** Заготовленные кадры муравьёв; пересобирается при смене размера клетки. */
+  private atlas: AntAtlas | null = null;
   private frame = 0;
   private width = 0;
   private height = 0;
@@ -135,6 +139,10 @@ export class AntsRenderer {
     this.canvas.height = Math.round(height * ratio);
     this.context.setTransform(ratio, 0, 0, ratio, 0, 0);
     this.layout = layout;
+    const length = Math.round(Math.max(ANT_MIN_LENGTH, this.cell() * ANT_LENGTH_CELLS));
+    if (!this.atlas || this.atlas.length !== length || this.atlas.ratio !== ratio) {
+      this.atlas = new AntAtlas(length, ratio);
+    }
     this.request();
   }
 
@@ -385,41 +393,28 @@ export class AntsRenderer {
   }
 
   private drawAnt(ant: Ant, time: number): void {
-    if (ant.phase === 'wait') {
+    if (ant.phase === 'wait' || !this.atlas) {
       return;
     }
     const { point, dx, dy } = pointAt(ant.path, (time - ant.start) * ANT_SPEED);
-    // спрайт смотрит вправо; поворачиваем по направлению участка
-    const angle = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? Math.PI : 0) : dy < 0 ? -Math.PI / 2 : Math.PI / 2;
-    const unit = Math.max(1.5, this.cell() * 0.13);
-    const step = Math.floor(time / 110) % 2;
-    const context = this.context;
-    context.save();
-    context.translate(point.x, point.y);
-    context.rotate(angle);
-    // влево — зеркалим, а не переворачиваем вверх ногами
-    if (angle === Math.PI) {
-      context.scale(1, -1);
-    }
-    const plot = (row: string, y: number) => {
-      for (let x = 0; x < row.length; x++) {
-        const mark = row[x];
-        if (mark === 'x' || mark === 'a') {
-          context.fillStyle = mark === 'x' ? color(ant.color) : UI_COLORS.ink;
-          context.fillRect((x - 4) * unit, (y - 2.5) * unit, unit, unit);
-        }
-      }
-    };
-    ANT_BODY.forEach((row, y) => plot(row, y));
-    plot(ANT_LEGS[step]!, ANT_BODY.length);
-    context.restore();
-    // обратный путь — несёт пиксель над собой
+    const direction = directionOf(dx, dy);
+    const frame = WALK_CYCLE[Math.floor((time - ant.launch) / ANT_STEP_MS) % WALK_CYCLE.length]!;
+    this.atlas.draw(this.context, ant.color, direction, frame, point.x, point.y);
+    // обратный путь — несёт свой пиксель перед головой (в «челюстях»)
     if (ant.phase === 'back') {
-      const piece = this.cell() * 0.5;
+      const length = this.atlas.length;
+      const piece = Math.max(6, this.cell() * 0.55);
+      const ahead = length * 0.55;
+      const x = point.x + Math.sign(dx) * (Math.abs(dx) >= Math.abs(dy) ? ahead : 0);
+      const y = point.y + Math.sign(dy) * (Math.abs(dy) > Math.abs(dx) ? ahead : 0);
+      const context = this.context;
       context.fillStyle = color(ant.color);
+      context.strokeStyle = UI_COLORS.ink;
+      context.lineWidth = Math.max(1, piece * 0.1);
       context.beginPath();
-      context.roundRect(point.x - piece / 2, point.y - 2.5 * unit - piece * 0.9, piece, piece, piece * 0.25);
+      context.roundRect(x - piece / 2, y - piece / 2, piece, piece, piece * 0.25);
       context.fill();
+      context.stroke();
     }
   }
 }

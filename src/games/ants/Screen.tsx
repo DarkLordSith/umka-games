@@ -56,7 +56,7 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
   const pictureRef = useRef<HTMLDivElement>(null);
   const holeRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const columnRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const columnRefs = useRef<(HTMLDivElement | null)[]>([]);
   const stackRefs = useRef<(HTMLDivElement | null)[]>([]);
   const lengths = useRef<number[]>(start.columns.map(column => column.length));
   const rendererRef = useRef<AntsRenderer | null>(null);
@@ -109,23 +109,54 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
     };
   }, [measure]);
 
-  // Колонка стала короче — стопка выезжает вверх: следующий блок встаёт на место верхнего,
-  // снизу из-за края экрана появляется новый.
+  /** Где стоял каждый блок стопки (offsetTop по ключу «колонка:место от дна») — для выезда вверх. */
+  const blockTops = useRef(new Map<string, number>());
+
+  // Колонка стала короче — стопка выезжает вверх: каждый блок едет со своего старого места
+  // на новое (FLIP), снизу из-за края экрана появляется новый. Undo и «заново» — без анимации.
   useLayoutEffect(() => {
+    const tops = new Map<string, number>();
     state.columns.forEach((blocks, index) => {
-      const before = lengths.current[index] ?? blocks.length;
+      const shorter = blocks.length < (lengths.current[index] ?? blocks.length);
       const stack = stackRefs.current[index];
-      const top = stack?.firstElementChild;
-      if (stack && top && blocks.length < before) {
-        const step = top.getBoundingClientRect().height + parseFloat(getComputedStyle(stack).rowGap || '0');
-        stack.animate([{ transform: `translateY(${step}px)` }, { transform: 'translateY(0)' }], {
-          duration: STACK_SLIDE_MS,
-          easing: 'cubic-bezier(0.3, 1.4, 0.5, 1)',
-        });
+      if (!stack) {
+        return;
+      }
+      const items = [...stack.querySelectorAll<HTMLElement>('[data-place]')];
+      const step = items.length > 1 ? items[1]!.offsetTop - items[0]!.offsetTop : 0;
+      for (const item of items) {
+        const id = `${index}:${item.dataset.place}`;
+        const top = item.offsetTop;
+        tops.set(id, top);
+        if (!shorter) {
+          continue;
+        }
+        const from = blockTops.current.get(id) ?? top + step;
+        if (from !== top) {
+          item.animate([{ translate: `0 ${from - top}px` }, { translate: '0 0' }], {
+            duration: STACK_SLIDE_MS,
+            easing: 'cubic-bezier(0.3, 1.4, 0.5, 1)',
+          });
+        }
       }
     });
+    blockTops.current = tops;
     lengths.current = state.columns.map(column => column.length);
   }, [state]);
+
+  /** Тап по блоку из очереди: хода нет, верхний блок подпрыгивает — «бери меня». */
+  const nudge = (column: number) => {
+    columnRefs.current[column]?.querySelector('.ants-block')?.animate(
+      [
+        { translate: '0 0' },
+        { translate: '0 -14px' },
+        { translate: '0 0' },
+        { translate: '0 -6px' },
+        { translate: '0 0' },
+      ],
+      { duration: 420, easing: 'ease-out' },
+    );
+  };
 
   const shake = (column: number) => {
     columnRefs.current[column]?.querySelector('.ants-block')?.animate(
@@ -250,16 +281,12 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
       <div className="ants-bottom">
         <div className="ants-columns">
           {state.columns.map((blocks, index) => (
-            <button
+            <div
               key={index}
-              type="button"
               className="ants-column"
               ref={element => {
                 columnRefs.current[index] = element;
               }}
-              aria-label={`колонка ${index + 1}`}
-              disabled={blocks.length === 0}
-              onPointerDown={() => onColumn(index)}
             >
               <div
                 className="ants-stack"
@@ -268,18 +295,37 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
                 }}
               >
                 {blocks.length === 0 ? <span className="ants-empty" /> : null}
-                {blocks.slice(0, STACK_RENDERED).map((block, depth) => (
-                  // ключ — место от дна колонки: при выезде вверх элементы те же, только сдвигаются
-                  <span
-                    key={blocks.length - depth}
-                    className={depth === 0 ? 'ants-block is-top' : 'ants-block'}
-                    style={{ background: colorVar(block.color) }}
-                  >
-                    <span className="ants-count">{block.ants}</span>
-                  </span>
-                ))}
+                {blocks.slice(0, STACK_RENDERED).map((block, depth) => {
+                  // место от дна колонки: при выезде вверх блок узнаётся по нему
+                  const place = blocks.length - depth;
+                  const face = (
+                    <span
+                      className={depth === 0 ? 'ants-block is-top' : 'ants-block is-queued'}
+                      style={{ background: colorVar(block.color) }}
+                    >
+                      <span className="ants-count">{block.ants}</span>
+                    </span>
+                  );
+                  // ход — только тап по верхнему блоку; зона касания — блок с запасом (≥ 60 pt)
+                  return depth === 0 ? (
+                    <button
+                      key={place}
+                      data-place={place}
+                      type="button"
+                      className="ants-top"
+                      aria-label={`колонка ${index + 1}`}
+                      onPointerDown={() => onColumn(index)}
+                    >
+                      {face}
+                    </button>
+                  ) : (
+                    <span key={place} data-place={place} className="ants-queued" onPointerDown={() => nudge(index)}>
+                      {face}
+                    </span>
+                  );
+                })}
               </div>
-            </button>
+            </div>
           ))}
         </div>
         <div className="ants-side">

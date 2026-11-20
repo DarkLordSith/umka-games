@@ -6,6 +6,8 @@
   --side: 76px;
   --gutter: 10px;
   --gap: 6px;
+  /* зазор между верхним рядом (его можно брать) и очередью */
+  --top-gap: 10px;
   /* колонка — четверть ширины без боковой панели и отступов, но не шире 72px (на SE ≈ 62px) */
   --column: min(72px, calc((100vw - var(--gutter) * 2 - var(--side) - 8px - var(--gap) * 4) / 4));
   /* блок пониже ширины: 4 штуки по высоте влезают на SE; вся колонка — цель касания */
@@ -104,7 +106,7 @@
   display: flex;
   gap: 8px;
   /* видно ровно 4 блока; 5-й — уже за нижним краем экрана */
-  height: calc(var(--block-h) * 4 + var(--gap) * 3 + 12px + var(--safe-bottom));
+  height: calc(var(--block-h) * 4 + var(--gap) * 2 + var(--top-gap) + 8px + 12px + var(--safe-bottom));
   padding: 12px max(var(--gutter), var(--safe-right)) 0 max(var(--gutter), var(--safe-left));
 }
 
@@ -118,10 +120,7 @@
 .ants-column {
   position: relative;
   width: var(--column);
-  /* зона касания — вся колонка до низа экрана */
   height: 100%;
-  display: block;
-  overflow: visible;
 }
 
 .ants-stack {
@@ -129,6 +128,13 @@
   flex-direction: column;
   align-items: center;
   row-gap: var(--gap);
+}
+
+/* верхний блок — единственная цель касания колонки: блок + 5px запаса со всех сторон (≥ 60 pt на SE) */
+.ants-top {
+  display: block;
+  padding: 5px;
+  margin: -5px -5px calc(var(--top-gap) - 5px);
 }
 
 .ants-block,
@@ -150,16 +156,17 @@
   transition: transform 0.1s ease-out;
 }
 
-/* блоки под верхним — тот же цвет и число, чуть меньше */
-.ants-block:not(.is-top) {
-  transform: scale(0.92);
+/* очередь: тот же цвет и число, но чуть меньше и темнее — видно, что брать верхний */
+.ants-block.is-queued {
+  transform: scale(0.86);
+  filter: brightness(0.9) saturate(0.85);
 }
 
-.ants-block:not(.is-top) .ants-count {
+.ants-block.is-queued .ants-count {
   font-size: 24px;
 }
 
-.ants-column:active .ants-block.is-top {
+.ants-top:active .ants-block {
   transform: scale(0.94);
 }
 
@@ -240,10 +247,6 @@
 .ants-undo:disabled,
 .ants-restart:disabled {
   opacity: 0.4;
-}
-
-.ants-column:disabled {
-  cursor: default;
 }
 
 /* --- полёт блока в слот --- */
