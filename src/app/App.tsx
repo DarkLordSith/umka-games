@@ -1,7 +1,16 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { type Progress, withAntsLevel } from '../engine/progress';
 import { AntsScreen } from '../games/ants/Screen';
 import { loadProgress, saveProgress } from './storage';
+
+/** Превью для отбраковки (только dev): ?dev=ants. В production-сборку не попадает. */
+const AntsPreview = import.meta.env.DEV
+  ? lazy(() => import('../games/ants/AntsPreview').then(module => ({ default: module.AntsPreview })))
+  : null;
+
+function devPage(): string | null {
+  return import.meta.env.DEV ? new URLSearchParams(window.location.search).get('dev') : null;
+}
 
 /** В dev можно открыть любой уровень: ?level=12 (для скриншотов и проверки кривой). */
 function devLevel(): number | null {
@@ -26,6 +35,14 @@ export function App() {
     saveProgress(next);
     setProgress(next);
   };
+
+  if (AntsPreview && devPage() === 'ants') {
+    return (
+      <Suspense fallback={null}>
+        <AntsPreview />
+      </Suspense>
+    );
+  }
 
   return <AntsScreen key={level} level={level} onWin={onWin} onNext={() => setLevel(level + 1)} />;
 }
