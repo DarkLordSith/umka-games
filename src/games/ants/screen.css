@@ -1,21 +1,21 @@
-/* Экран муравьёв. Размеры подобраны под 375×667 (SE) и 390×844; всё в один экран. */
+/* Экран муравьёв. Проверено на 375×667 (SE), 390×844 и 430×932; всё в один экран. */
 
 .ants {
   --slot: 50px;
-  /* правая колонка с Undo и «заново» */
-  --side: 76px;
-  --gutter: 10px;
   --gap: 6px;
   /* зазор между верхним рядом (его можно брать) и очередью */
   --top-gap: 10px;
-  /* колонка — четверть ширины без боковой панели и отступов, но не шире 72px (на SE ≈ 62px) */
-  --column: min(72px, calc((100vw - var(--gutter) * 2 - var(--side) - 8px - var(--gap) * 4) / 4));
-  /* блок пониже ширины: 4 штуки по высоте влезают на SE; вся колонка — цель касания */
-  --block-h: calc(var(--column) * 0.84);
+  /* стопки по центру на всю ширину: колонка — четверть ширины без отступов, не шире 72px */
+  --column: min(72px, calc((100vw - 32px - var(--gap) * 3) / 4));
+  /* высота блока от высоты экрана: 50 на SE, до 60 на больших; верхний + запас 5px = цель ≥ 60 pt */
+  --block-h: clamp(50px, calc(100vh * 0.075), 60px);
+  /* нижняя полоса с «заново» и Undo */
+  --bar: 84px;
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-rows: var(--top-zone) minmax(0, 1fr) auto auto;
+  /* фон | картинка | муравейник и слоты | стопки (3 ряда) | нижняя полоса */
+  grid-template-rows: var(--top-zone) minmax(0, 1fr) auto auto auto;
   /* без этого колонка grid растёт под ширину картинки и картинка раздувается по кругу */
   grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
@@ -53,13 +53,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  /* дырка — между картинкой и слотами, с зазором; canvas рисует её строго в этом месте */
+  gap: 8px;
   padding: 0 16px;
 }
 
 .ants-hole {
-  width: 56px;
-  height: 20px;
+  width: 64px;
+  height: 22px;
 }
 
 .ants-slots {
@@ -100,27 +101,22 @@
   }
 }
 
-/* --- низ: стопки до нижнего края экрана + боковая панель --- */
-
-.ants-bottom {
-  display: flex;
-  gap: 8px;
-  /* видно ровно 4 блока; 5-й — уже за нижним краем экрана */
-  height: calc(var(--block-h) * 4 + var(--gap) * 2 + var(--top-gap) + 8px + 12px + var(--safe-bottom));
-  padding: 12px max(var(--gutter), var(--safe-right)) 0 max(var(--gutter), var(--safe-left));
-}
+/* --- стопки: по центру, видно ровно 3 ряда; дальше блоки уходят за верх нижней полосы --- */
 
 .ants-columns {
-  flex: 1;
   display: flex;
   justify-content: center;
   gap: var(--gap);
+  /* отступ сверху + 3 ряда + зазор под верхним рядом (top-gap + gap) + зазор в очереди */
+  height: calc(10px + var(--block-h) * 3 + var(--top-gap) + var(--gap) * 2);
+  padding: 10px 16px 0;
+  /* обрезаем только снизу: подпрыгивание верхнего блока вверх не режется */
+  clip-path: inset(-60px -60px 0 -60px);
 }
 
 .ants-column {
   position: relative;
   width: var(--column);
-  height: 100%;
 }
 
 .ants-stack {
@@ -193,14 +189,19 @@
   font-size: 23px;
 }
 
-.ants-side {
-  flex: none;
-  width: var(--side);
+.ants-bar {
+  position: relative;
+  z-index: 1;
   display: flex;
-  flex-direction: column;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: max(12px, var(--safe-bottom));
+  height: calc(var(--bar) + var(--safe-bottom));
+  padding: 0 max(14px, var(--safe-right)) var(--safe-bottom) max(14px, var(--safe-left));
+  /* «земля» — зеркало верхней полосы: блоки стопок уходят под неё */
+  background: var(--panel);
+  border-top-left-radius: 28px;
+  border-top-right-radius: 28px;
+  box-shadow: 0 -4px 0 var(--shadow);
 }
 
 .ants-undo {
@@ -233,7 +234,7 @@
   height: 44px;
   padding: 9px;
   border-radius: 50%;
-  background: var(--panel);
+  background: var(--bg);
   color: var(--ink);
 }
 
