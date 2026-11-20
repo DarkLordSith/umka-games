@@ -13,7 +13,7 @@ export interface ParentScreenProps {
 
 export function ParentScreen({ progress, onProgress, onBack }: ParentScreenProps) {
   const [resetting, setResetting] = useState<AnyGame | null>(null);
-  const { sfx, voice } = progress.settings;
+  const { sfx, voice, music } = progress.settings;
 
   return (
     <div className="parent">
@@ -30,6 +30,10 @@ export function ParentScreen({ progress, onProgress, onBack }: ParentScreenProps
           <label className="parent-switch">
             <span>Голос</span>
             <input type="checkbox" checked={voice} onChange={() => onProgress(withSettings(progress, { voice: !voice }))} />
+          </label>
+          <label className="parent-switch">
+            <span>Музыка</span>
+            <input type="checkbox" checked={music} onChange={() => onProgress(withSettings(progress, { music: !music }))} />
           </label>
         </section>
 

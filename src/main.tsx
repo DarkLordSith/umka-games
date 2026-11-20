@@ -4,11 +4,14 @@ import { registerSW } from 'virtual:pwa-register';
 import { App } from './app/App';
 import { blockIosZoom } from './app/ios';
 import { installAudioUnlock } from './audio/engine';
+import { installMusic } from './audio/music';
 import './app/base.css';
 
 blockIosZoom();
 // звук будится первым касанием (раньше браузеры не дают) и возобновляется при возврате на экран
 installAudioUnlock();
+// фоновая музыка: после первого касания, непрерывно по всем экранам, пауза в фоне
+installMusic();
 
 const root = document.getElementById('root');
 if (!root) {

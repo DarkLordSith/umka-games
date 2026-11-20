@@ -2,22 +2,27 @@
 // касания: контекст создаётся и «будится» первым касанием, а при возврате на экран
 // (iOS приостанавливает звук свёрнутой PWA) — resume.
 //
-// Два канала: эффекты и голос. Пока звучит голос, эффекты тише (duck).
+// Три канала: эффекты, голос и музыка. Пока звучит голос, эффекты тише, а музыка — ещё тише.
 // Выключатели из родительского экрана (progress.settings) применяет оболочка: setAudioSettings.
 
 export interface AudioSettings {
   readonly sfx: boolean;
   readonly voice: boolean;
+  readonly music: boolean;
 }
 
 /** Громкость эффектов, пока звучит голос. */
 const DUCKED = 0.35;
+/** Громкость музыки, пока звучит голос (приглушается сильнее эффектов). */
+const MUSIC_DUCKED = 0.2;
 
 let context: AudioContext | null = null;
 let sfxBus: GainNode | null = null;
 let voiceBus: GainNode | null = null;
-let settings: AudioSettings = { sfx: true, voice: true };
+let musicBus: GainNode | null = null;
+let settings: AudioSettings = { sfx: true, voice: true, music: true };
 const listeners = new Set<() => void>();
+const settingsListeners = new Set<() => void>();
 
 type ContextClass = typeof AudioContext;
 
@@ -30,8 +35,10 @@ function create(): AudioContext | null {
   const created = new Class();
   sfxBus = created.createGain();
   voiceBus = created.createGain();
+  musicBus = created.createGain();
   sfxBus.connect(created.destination);
   voiceBus.connect(created.destination);
+  musicBus.connect(created.destination);
   return created;
 }
 
@@ -82,8 +89,17 @@ export function onAudioReady(listener: () => void): void {
   }
 }
 
+/** Настройки поменялись (музыка включается и выключается сама). */
+export function onAudioSettings(listener: () => void): void {
+  settingsListeners.add(listener);
+}
+
 export function setAudioSettings(next: AudioSettings): void {
+  const changed = next.sfx !== settings.sfx || next.voice !== settings.voice || next.music !== settings.music;
   settings = next;
+  if (changed) {
+    settingsListeners.forEach(listener => listener());
+  }
   // выключили голос посреди фразы — замолкает сразу
   if (voiceBus && context) {
     voiceBus.gain.setValueAtTime(next.voice ? 1 : 0, context.currentTime);
@@ -102,16 +118,26 @@ export function voiceOutput(): GainNode | null {
   return settings.voice ? voiceBus : null;
 }
 
-/** Эффекты тише на seconds (пока звучит голос). */
-export function duckSfx(seconds: number): void {
-  if (!context || !sfxBus) {
+/** Канал музыки (приглушается под голос). Включена ли музыка — решает music.ts по settings. */
+export function musicOutput(): GainNode | null {
+  return musicBus;
+}
+
+function duck(bus: GainNode | null, level: number, seconds: number): void {
+  if (!context || !bus) {
     return;
   }
   const now = context.currentTime;
-  const gain = sfxBus.gain;
+  const gain = bus.gain;
   gain.cancelScheduledValues(now);
   gain.setValueAtTime(gain.value, now);
-  gain.linearRampToValueAtTime(DUCKED, now + 0.08);
-  gain.setValueAtTime(DUCKED, now + seconds);
-  gain.linearRampToValueAtTime(1, now + seconds + 0.25);
+  gain.linearRampToValueAtTime(level, now + 0.08);
+  gain.setValueAtTime(level, now + seconds);
+  gain.linearRampToValueAtTime(1, now + seconds + 0.35);
+}
+
+/** Пока звучит голос (seconds): эффекты тише, музыка — ещё тише. */
+export function duckForVoice(seconds: number): void {
+  duck(sfxBus, DUCKED, seconds);
+  duck(musicBus, MUSIC_DUCKED, seconds);
 }
