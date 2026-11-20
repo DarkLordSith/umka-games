@@ -1,0 +1,17 @@
+{
+  "v": 3,
+  "games": {
+    "ants": {
+      "difficulty": 6,
+      "streak": 1,
+      "seed": 4,
+      "levels": [
+        { "difficulty": 4, "seed": 1, "variant": "heart" },
+        { "difficulty": 5, "seed": 2, "variant": "dog" },
+        { "difficulty": 5, "seed": 3, "variant": "no-such-picture" }
+      ]
+    }
+  },
+  "stickers": [0, 1, 2],
+  "settings": { "sfx": false, "voice": true }
+}

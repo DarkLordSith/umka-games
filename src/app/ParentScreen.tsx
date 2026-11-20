@@ -1,6 +1,6 @@
 // Родительский экран (за замком: 3 с держать в углу меню). Здесь — и только здесь — можно текст.
 import { useState } from 'react';
-import { gameProgress, type Progress, withoutGame, withSettings } from '../engine/progress';
+import { gameProgress, levelsWon, type Progress, withoutGame, withSettings } from '../engine/progress';
 import { type AnyGame, GAMES } from '../games/registry';
 import { Modal } from '../ui/Modal';
 import './parent.css';
@@ -43,7 +43,7 @@ export function ParentScreen({ progress, onProgress, onBack }: ParentScreenProps
                   <game.Icon />
                 </span>
                 <span className="parent-game-stats">
-                  Пройдено уровней: {saved.won}
+                  Пройдено уровней: {levelsWon(saved)}
                   <br />
                   Сложность: {saved.difficulty}
                 </span>

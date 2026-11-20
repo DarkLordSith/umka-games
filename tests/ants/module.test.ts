@@ -10,7 +10,7 @@ describe('муравьи по контракту', () => {
   });
 
   it('стартовый уровень проходится по подсказкам через сессию — чистая победа', () => {
-    let session = startSession(antsGame.makeLevel(antsGame.startDifficulty, 1));
+    let session = startSession(antsGame.makeLevel({ difficulty: antsGame.startDifficulty, seed: 1, variant: 'heart' }));
     for (let guard = 0; guard < 200 && !antsGame.isWon(sessionState(session)); guard++) {
       const move = antsGame.hint(sessionState(session));
       expect(move).not.toBeNull();
