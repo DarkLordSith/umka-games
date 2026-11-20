@@ -16,7 +16,9 @@
 // 5. Блоки по ключу раздаются в колонки по кругу (первый — наверх).
 // 6. Решатель проверяет уровень; для первых уровней ещё и «тупик невозможен».
 //    Не прошёл — следующий seed (детерминированно).
+import { bagRemaining } from '../../engine/levels';
 import { mulberry32, randomInt, type Rng } from '../../engine/rng';
+import type { LevelSpec } from '../../engine/types';
 import { BLACK } from '../../ui/palette';
 import { accessibleIndices, type AntsState, type Block, EMPTY, SLOT_COUNT } from './logic';
 import { type Picture, PICTURES } from './pictures';
@@ -195,10 +197,9 @@ function rawPick(level: number, seed: number): number {
 const PICK_LOOKBACK = 50;
 
 /**
- * Индекс картинки уровня в PICTURES. Детерминированно по (сложность, seed); картинка
- * предыдущего seed подряд не идёт. Цепочка «предыдущих» считается от seed − PICK_LOOKBACK,
- * чтобы не уходить в рекурсию на тысячи уровней. Временное решение: «мешок без повторов»
- * с id картинки в прогрессе — задача карты уровней.
+ * Индекс картинки в PICTURES по (сложность, seed) — запасной выбор, когда у уровня нет
+ * сохранённой картинки (dev ?level=N или картинку удалили). Картинка предыдущего seed
+ * подряд не идёт. Цепочка «предыдущих» считается от seed − PICK_LOOKBACK.
  */
 export function pickPicture(level: number, seed: number): number {
   let previous = -1;
@@ -233,9 +234,51 @@ export function scaleBlocks(params: LevelParams, picture: Picture): LevelParams 
  */
 const SAFE_CHECK_MAX_CELLS = 144;
 
+/** Id всех картинок — варианты «мешка». */
+export const PICTURE_IDS: readonly string[] = PICTURES.map(picture => picture.id);
+
 /**
- * Уровень по сложности (с 1) и seed. Детерминированно: тот же (level, seed) → тот же уровень.
- * Картинку выбирает pickPicture.
+ * Картинка следующего уровня: «мешок без повторов» (engine/levels.ts) — пока не показаны
+ * все картинки, повторов нет, только что пройденная следующей не идёт. Из оставшихся
+ * в мешке класс размера выбирается по весам сложности (sizeWeights), картинка внутри
+ * класса — случайно по seed. Если подходящих по весу нет (первые уровни берут только
+ * 12×12, а все 12×12 круга уже показаны) — 12×12 с повтором, но не только что пройденная.
+ */
+export function nextPicture(level: number, seed: number, played: readonly (string | null)[]): string {
+  const rng = mulberry32(Math.floor(seed) * 7907 + 3);
+  const weights = sizeWeights(level);
+  let pool = bagRemaining(PICTURE_IDS, played);
+  if (!pool.some(id => weights[sizeClass(PICTURES[PICTURE_IDS.indexOf(id)]!)]! > 0)) {
+    const last = [...played].reverse().find(id => id !== null);
+    pool = BY_CLASS[0]!.map(index => PICTURE_IDS[index]!).filter(id => id !== last);
+  }
+  const classes = SIZE_CLASSES.map((_, size) =>
+    pool.filter(id => sizeClass(PICTURES[PICTURE_IDS.indexOf(id)]!) === size),
+  );
+  const classWeights = classes.map((ids, size) => (ids.length > 0 ? weights[size]! : 0));
+  let roll = rng() * classWeights.reduce((sum, weight) => sum + weight, 0);
+  let size = classWeights.findIndex(weight => (roll -= weight) < 0);
+  if (size === -1) {
+    size = classWeights.reduce((last, weight, index) => (weight > 0 ? index : last), 0);
+  }
+  const ids = classes[size]!;
+  return ids[Math.floor(rng() * ids.length)]!;
+}
+
+/** Картинка уровня: сохранённая по id, а если её нет (dev ?level=N, удалили) — по seed. */
+export function pictureFor(spec: LevelSpec): Picture {
+  const saved = spec.variant === null ? undefined : PICTURES.find(picture => picture.id === spec.variant);
+  return saved ?? PICTURES[pickPicture(spec.difficulty, spec.seed)]!;
+}
+
+/** Уровень по параметрам из прогресса (контракт игры). */
+export function levelFromSpec(spec: LevelSpec): AntsState {
+  return makeLevelFor(pictureFor(spec), spec.difficulty, spec.seed);
+}
+
+/**
+ * Уровень по сложности (с 1) и seed, картинка — по seed (pickPicture). Для тестов и dev;
+ * игра строит уровни через levelFromSpec. Детерминированно.
  */
 export function makeLevel(level: number, seed: number): AntsState {
   return makeLevelFor(PICTURES[pickPicture(level, seed)]!, level, seed);

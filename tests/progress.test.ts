@@ -5,6 +5,7 @@ import { BROKEN_KEY, type KeyValueStorage, loadProgress, PROGRESS_KEY, saveProgr
 import {
   defaultProgress,
   gameProgress,
+  levelsWon,
   migrate,
   parseProgress,
   PROGRESS_VERSION,
@@ -12,7 +13,7 @@ import {
   withoutGame,
   withSettings,
 } from '../src/engine/progress';
-import { makeLevel } from '../src/games/ants/generator';
+import { antsGame } from '../src/games/ants';
 
 const FIXTURES = join(import.meta.dirname, 'fixtures');
 const fixture = (name: string) => readFileSync(join(FIXTURES, name), 'utf8');
@@ -32,7 +33,7 @@ function memoryStorage(initial: Record<string, string> = {}): KeyValueStorage & 
 describe('прогресс', () => {
   it('каждая фикстура прошлых версий загружается в текущую схему', () => {
     const files = readdirSync(FIXTURES).filter(file => file.startsWith('progress-'));
-    expect(files).toEqual(expect.arrayContaining(['progress-v1.json', 'progress-v2.json']));
+    expect(files).toEqual(expect.arrayContaining(['progress-v1.json', 'progress-v2.json', 'progress-v3.json']));
     for (const file of files) {
       const progress = migrate(JSON.parse(fixture(file)));
       expect(progress.v, file).toBe(PROGRESS_VERSION);
@@ -40,33 +41,45 @@ describe('прогресс', () => {
     }
   });
 
-  it('v1 → v2: уровень муравьёв L — сложность L, seed L, пройдено L − 1', () => {
+  it('v1 → v3: уровень муравьёв L — сложность L, seed L, пройдено L − 1', () => {
     const progress = loadProgress(memoryStorage({ [PROGRESS_KEY]: fixture('progress-v1.json') }));
-    expect(progress.games.ants).toEqual({ difficulty: 7, streak: 0, won: 6, seed: 7 });
+    const ants = progress.games.ants!;
+    expect(ants).toMatchObject({ difficulty: 7, streak: 0, seed: 7 });
+    expect(levelsWon(ants)).toBe(6);
     expect(progress.stickers).toEqual([]);
     expect(progress.settings).toEqual({ sfx: true, voice: true });
   });
 
-  it('после обновления — тот же самый уровень муравьёв, что был в v1', () => {
-    // v1 строил уровень L как makeLevel(L, L). Картинка у него уже другая (картинок стало больше),
-    // но сложность и номер уровня те же.
-    const ants = migrate(JSON.parse(fixture('progress-v1.json'))).games.ants!;
-    expect(makeLevel(ants.difficulty, ants.seed)).toEqual(makeLevel(7, 7));
+  it('v2 → v3: номер текущей точки = прежний уровень, история восстановлена приближённо', () => {
+    const progress = migrate(JSON.parse(fixture('progress-v2.json')));
+    const ants = progress.games.ants!;
+    expect(ants).toMatchObject({ difficulty: 12, streak: -1, seed: 16 });
+    // было пройдено 15 → текущая точка 16
+    expect(levelsWon(ants)).toBe(15);
+    // уровень i: seed i, сложность min(i, текущая), картинка, что seed i давал в v2 (10 по кругу)
+    expect(ants.levels[0]).toEqual({ difficulty: 1, seed: 1, variant: 'apple' });
+    expect(ants.levels[6]).toEqual({ difficulty: 7, seed: 7, variant: 'cat' });
+    expect(ants.levels[10]).toEqual({ difficulty: 11, seed: 11, variant: 'apple' });
+    expect(ants.levels[14]).toEqual({ difficulty: 12, seed: 15, variant: 'mushroom' });
+    expect(progress.stickers).toEqual([0, 1, 2, 3]);
+    expect(progress.settings).toEqual({ sfx: true, voice: false });
   });
 
-  it('v2 читается как есть', () => {
-    expect(migrate(JSON.parse(fixture('progress-v2.json')))).toEqual({
-      v: 2,
-      games: { ants: { difficulty: 12, streak: -1, won: 15, seed: 16 } },
-      stickers: [0, 1, 2, 3],
-      settings: { sfx: true, voice: false },
-    });
+  it('v3 читается как есть', () => {
+    expect(migrate(JSON.parse(fixture('progress-v3.json')))).toEqual(JSON.parse(fixture('progress-v3.json')));
+  });
+
+  it('пройденный уровень открывается тем же самым, даже если его картинки уже нет', () => {
+    const ants = migrate(JSON.parse(fixture('progress-v3.json'))).games.ants!;
+    for (const level of ants.levels) {
+      expect(antsGame.makeLevel(level)).toEqual(antsGame.makeLevel({ ...level }));
+    }
   });
 
   it('нет сохранения — чистый прогресс; игра без записи стартует со своей сложности', () => {
     expect(loadProgress(memoryStorage())).toEqual(defaultProgress());
     expect(loadProgress(null)).toEqual(defaultProgress());
-    expect(gameProgress(defaultProgress(), 'ants', 4)).toEqual({ difficulty: 4, streak: 0, won: 0, seed: 1 });
+    expect(gameProgress(defaultProgress(), 'ants', 4)).toEqual({ difficulty: 4, streak: 0, seed: 1, levels: [] });
   });
 
   it('битый JSON — чистый прогресс, старое значение копируется в umka-progress-broken', () => {
@@ -83,12 +96,14 @@ describe('прогресс', () => {
 
   it('недостающие и неверные поля — значения по умолчанию, мусор отбрасывается', () => {
     const progress = migrate({
-      v: 2,
-      games: { ants: { difficulty: -3, streak: 'x', won: 2.5 }, junk: 5 },
+      v: 3,
+      games: { ants: { difficulty: -3, streak: 'x', levels: [{ seed: 2, difficulty: 0 }, 'x', { difficulty: 3 }] }, junk: 5 },
       stickers: [3, 3, -1, 'a', 7],
       settings: { sfx: 'yes' },
     });
-    expect(progress.games).toEqual({ ants: { difficulty: 1, streak: 0, won: 0, seed: 1 } });
+    expect(progress.games).toEqual({
+      ants: { difficulty: 1, streak: 0, seed: 1, levels: [{ difficulty: 1, seed: 2, variant: null }] },
+    });
     expect(progress.stickers).toEqual([3, 7]);
     expect(progress.settings).toEqual({ sfx: true, voice: true });
     expect(migrate({ v: 1, games: { ants: { level: 2.5 } } }).games.ants?.difficulty).toBe(1);
@@ -109,7 +124,12 @@ describe('прогресс', () => {
 
   it('сохранить и загрузить — тот же прогресс', () => {
     const storage = memoryStorage();
-    const progress = withGame(defaultProgress(), 'ants', { difficulty: 5, streak: 2, won: 9, seed: 10 });
+    const progress = withGame(defaultProgress(), 'ants', {
+      difficulty: 5,
+      streak: 2,
+      seed: 10,
+      levels: [{ difficulty: 4, seed: 9, variant: 'cake' }],
+    });
     saveProgress(progress, storage);
     expect(loadProgress(storage)).toEqual(progress);
   });
@@ -117,16 +137,16 @@ describe('прогресс', () => {
 
 describe('родительский экран: сброс и настройки', () => {
   it('сброс игры убирает только её запись', () => {
-    const progress = withGame(withGame(defaultProgress(), 'ants', { difficulty: 9, streak: 0, won: 8, seed: 9 }), 'other', {
+    const progress = withGame(withGame(defaultProgress(), 'ants', { difficulty: 9, streak: 0, seed: 9, levels: [] }), 'other', {
       difficulty: 2,
       streak: 0,
-      won: 1,
       seed: 2,
+      levels: [{ difficulty: 1, seed: 1, variant: null }],
     });
     const reset = withoutGame(progress, 'ants');
     expect(reset.games.ants).toBeUndefined();
     expect(reset.games.other).toEqual(progress.games.other);
-    expect(gameProgress(reset, 'ants', 1)).toEqual({ difficulty: 1, streak: 0, won: 0, seed: 1 });
+    expect(gameProgress(reset, 'ants', 1)).toEqual({ difficulty: 1, streak: 0, seed: 1, levels: [] });
   });
 
   it('настройки меняются по одной', () => {

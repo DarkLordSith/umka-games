@@ -20,6 +20,21 @@ export interface GameScreenProps<State, Move> {
   readonly onWinShown: () => void;
 }
 
+/**
+ * Параметры уровня: по ним игра детерминированно строит уровень. Хранятся в прогрессе
+ * (пройденные уровни), поэтому переигровка даёт тот же самый уровень.
+ */
+export interface LevelSpec {
+  readonly difficulty: number;
+  readonly seed: number;
+  /**
+   * Вариант контента, выбранный «мешком без повторов» (у муравьёв — id картинки).
+   * Хранится явно, чтобы новые картинки не меняли пройденные уровни. null — у игры
+   * вариантов нет (или вариант пропал из игры: тогда игра выбирает сама по seed).
+   */
+  readonly variant: string | null;
+}
+
 export interface GameModule<State, Move> {
   /** Ключ в прогрессе и реестре: 'ants', 'color-jam'. */
   readonly id: string;
@@ -29,8 +44,16 @@ export interface GameModule<State, Move> {
   readonly startDifficulty: number;
   /** Ниже адаптивная сложность не опускается. */
   readonly minDifficulty: number;
-  /** Детерминированно: тот же (difficulty, seed) → тот же уровень. */
-  makeLevel(difficulty: number, seed: number): State;
+  /** Детерминированно: тот же LevelSpec → тот же уровень. */
+  makeLevel(level: LevelSpec): State;
+  /**
+   * Вариант следующего уровня (у муравьёв — картинка) по сложности, seed и вариантам
+   * уже пройденных уровней по порядку: «мешок без повторов» (engine/levels.ts).
+   * Нет у игры — у уровней variant = null.
+   */
+  nextVariant?(difficulty: number, seed: number, played: readonly (string | null)[]): string | null;
+  /** Маленькая картинка уровня для карты. Нет — кружок без превью. */
+  readonly Thumbnail?: ComponentType<{ readonly level: LevelSpec }>;
   /** null — ход невозможен; state не мутирует. */
   applyMove(state: State, move: Move): State | null;
   isWon(state: State): boolean;

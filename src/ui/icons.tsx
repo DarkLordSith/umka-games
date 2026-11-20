@@ -71,3 +71,22 @@ export function LockIcon() {
     </svg>
   );
 }
+
+/** «Дальше» после победы: толстый скруглённый треугольник ▶. */
+export function NextIcon() {
+  return (
+    <svg viewBox="0 0 48 48" width="100%" height="100%" aria-hidden="true">
+      <path d="M16 9 L39 24 L16 39 Z" fill="currentColor" stroke="currentColor" strokeWidth="6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Замочек на закрытой точке карты. */
+export function SmallLockIcon() {
+  return (
+    <svg viewBox="0 0 48 48" width="100%" height="100%" aria-hidden="true">
+      <rect x="11" y="21" width="26" height="20" rx="5" fill="currentColor" />
+      <path d="M17 21 V16 a7 7 0 0 1 14 0 V21" fill="none" stroke="currentColor" strokeWidth="5" />
+    </svg>
+  );
+}

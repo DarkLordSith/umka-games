@@ -4,18 +4,30 @@
 // История схемы:
 //   v1 — { v: 1, games: { ants: { level } } }
 //   v2 — по каждой игре { difficulty, streak, won, seed }, stickers, settings { sfx, voice }
+//   v3 — по каждой игре { difficulty, streak, seed, levels: [{ difficulty, seed, variant }] };
+//        won больше не хранится: пройдено = levels.length (одно место правды)
 
-export const PROGRESS_VERSION = 2;
+import type { LevelSpec } from './types';
+
+export const PROGRESS_VERSION = 3;
+
+/** Пройденный уровень: по нему игра строит тот же уровень для переигровки. */
+export type LevelRecord = LevelSpec;
 
 export interface GameProgress {
-  /** Текущая сложность (число, по которому игра строит уровень). */
+  /** Сложность следующего (ещё не пройденного) уровня. */
   readonly difficulty: number;
   /** Серия адаптивной сложности: > 0 — чистые победы подряд, < 0 — трудные уровни подряд. */
   readonly streak: number;
-  /** Сколько уровней пройдено всего. */
-  readonly won: number;
-  /** seed текущего (ещё не пройденного) уровня: после перезапуска — тот же уровень. */
+  /** seed следующего уровня: после перезапуска — тот же уровень. */
   readonly seed: number;
+  /** Пройденные уровни по порядку: индекс = номер уровня на карте − 1. */
+  readonly levels: readonly LevelRecord[];
+}
+
+/** Сколько уровней пройдено; номер текущей точки на карте — на 1 больше. */
+export function levelsWon(game: GameProgress): number {
+  return game.levels.length;
 }
 
 export interface Settings {
@@ -38,7 +50,7 @@ export function defaultProgress(): Progress {
 
 /** Прогресс игры или стартовый, если игра ещё не начата. */
 export function gameProgress(progress: Progress, id: string, startDifficulty: number): GameProgress {
-  return progress.games[id] ?? { difficulty: startDifficulty, streak: 0, won: 0, seed: 1 };
+  return progress.games[id] ?? { difficulty: startDifficulty, streak: 0, seed: 1, levels: [] };
 }
 
 export function withGame(progress: Progress, id: string, game: GameProgress): Progress {
@@ -79,20 +91,71 @@ function v1ToV2(raw: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
-function sanitizeGame(raw: unknown): GameProgress | null {
-  if (!isObject(raw)) {
+/** Больше уровней в истории не бывает (защита от битых данных: карта рендерит по списку). */
+const MAX_LEVELS = 100_000;
+
+/**
+ * Картинки муравьёв v2 по кругу: seed i давал PICTURES[(i − 1) % 10] из этих 10.
+ * Нужно только миграции v2 → v3 — восстановить, что сын уже съел.
+ */
+const V2_ANTS_PICTURES = ['apple', 'fish', 'sun', 'car', 'mushroom', 'strawberry', 'cat', 'house', 'ladybug', 'tree'];
+
+/**
+ * v2 → v3: истории уровней не было — восстанавливаем приближённо. Уровень i (1…won):
+ * seed i, сложность min(i, текущая), у муравьёв — картинка, которую seed i давал в v2.
+ * Главное — номер текущей точки на карте = прежний уровень (won + 1).
+ */
+function v2ToV3(raw: Record<string, unknown>): Record<string, unknown> {
+  const games: Record<string, unknown> = {};
+  if (isObject(raw.games)) {
+    for (const [id, value] of Object.entries(raw.games)) {
+      if (!isObject(value)) {
+        continue;
+      }
+      const difficulty = int(value.difficulty, 1, 1);
+      const won = Math.min(MAX_LEVELS, int(value.won, 0, 0));
+      const levels = Array.from({ length: won }, (_, index) => ({
+        difficulty: Math.min(index + 1, difficulty),
+        seed: index + 1,
+        variant: id === 'ants' ? V2_ANTS_PICTURES[index % V2_ANTS_PICTURES.length]! : null,
+      }));
+      games[id] = { difficulty, streak: value.streak, seed: value.seed, levels };
+    }
+  }
+  return { ...raw, v: 3, games };
+}
+
+function sanitizeLevel(raw: unknown): LevelRecord | null {
+  if (!isObject(raw) || !isInt(raw.seed)) {
     return null;
   }
   return {
     difficulty: int(raw.difficulty, 1, 1),
-    streak: isInt(raw.streak) ? raw.streak : 0,
-    won: int(raw.won, 0, 0),
-    seed: isInt(raw.seed) ? raw.seed : 1,
+    seed: raw.seed,
+    variant: typeof raw.variant === 'string' ? raw.variant : null,
   };
 }
 
-/** v2 по полям: недостающие — по умолчанию, лишние отбрасываются. */
-function sanitizeV2(raw: Record<string, unknown>): Progress {
+function sanitizeGame(raw: unknown): GameProgress | null {
+  if (!isObject(raw)) {
+    return null;
+  }
+  const levels = Array.isArray(raw.levels)
+    ? raw.levels
+        .slice(0, MAX_LEVELS)
+        .map(sanitizeLevel)
+        .filter((level): level is LevelRecord => level !== null)
+    : [];
+  return {
+    difficulty: int(raw.difficulty, 1, 1),
+    streak: isInt(raw.streak) ? raw.streak : 0,
+    seed: isInt(raw.seed) ? raw.seed : 1,
+    levels,
+  };
+}
+
+/** Текущая схема по полям: недостающие — по умолчанию, лишние отбрасываются. */
+function sanitize(raw: Record<string, unknown>): Progress {
   const games: Record<string, GameProgress> = {};
   if (isObject(raw.games)) {
     for (const [id, value] of Object.entries(raw.games)) {
@@ -118,6 +181,7 @@ function sanitizeV2(raw: Record<string, unknown>): Progress {
 /** Шаги миграции: ключ — версия, из которой шаг ведёт в следующую. */
 const STEPS: Readonly<Record<number, (raw: Record<string, unknown>) => Record<string, unknown>>> = {
   1: v1ToV2,
+  2: v2ToV3,
 };
 
 /**
@@ -146,7 +210,7 @@ export function migrate(raw: unknown): Progress {
     data = step(data);
     version = data.v as number;
   }
-  return sanitizeV2(data);
+  return sanitize(data);
 }
 
 export interface ParsedProgress {

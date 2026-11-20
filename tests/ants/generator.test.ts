@@ -3,7 +3,11 @@ import { canUndo, createHistory, current, push, undo } from '../../src/engine/hi
 import {
   levelParams,
   makeLevel,
+  levelFromSpec,
   makeLevelFor,
+  nextPicture,
+  PICTURE_IDS,
+  pictureFor,
   onionLayers,
   outlinePicture,
   pickPicture,
@@ -134,6 +138,37 @@ describe('генератор', () => {
         expect(pickPicture(level, seed)).not.toBe(pickPicture(level, seed - 1));
       }
     }
+  });
+
+  it('мешок картинок: круг без повторов, детерминированно, подряд одна не идёт', () => {
+    for (const level of [1, 8, 25, 45]) {
+      const played: string[] = [];
+      for (let seed = 1; seed <= PICTURE_IDS.length * 2; seed++) {
+        const id = nextPicture(level, seed, played);
+        expect(nextPicture(level, seed, played)).toBe(id);
+        expect(id).not.toBe(played[played.length - 1]);
+        played.push(id);
+      }
+      if (level > SAFE_LEVELS) {
+        // первый круг — все картинки по одному разу
+        expect(new Set(played.slice(0, PICTURE_IDS.length)).size, `сложность ${level}`).toBe(PICTURE_IDS.length);
+      }
+    }
+  });
+
+  it('первые уровни — только 12×12, даже когда 12×12 круга кончились', () => {
+    const played = PICTURES.filter(picture => sizeClass(picture) === 0).map(picture => picture.id);
+    for (let seed = 1; seed <= 20; seed++) {
+      expect(sizeClass(pictureFor({ difficulty: 1, seed, variant: nextPicture(1, seed, played) }))).toBe(0);
+    }
+  });
+
+  it('уровень из записи прогресса — с сохранённой картинкой; пропавшая — запасной выбор по seed', () => {
+    const state = levelFromSpec({ difficulty: 10, seed: 3, variant: 'cake' });
+    const cake = PICTURES.find(picture => picture.id === 'cake')!;
+    expect([state.width, state.height]).toEqual([cake.width, cake.height]);
+    expect(levelFromSpec({ difficulty: 10, seed: 3, variant: 'cake' })).toEqual(state);
+    expect(levelFromSpec({ difficulty: 10, seed: 3, variant: 'нет-такой' })).toEqual(makeLevel(10, 3));
   });
 
   it('Undo до начала: решение проигрывается и откатывается к стартовому уровню', () => {

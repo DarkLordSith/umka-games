@@ -1,7 +1,8 @@
 import { lazy, Suspense, useCallback, useState } from 'react';
 import type { Progress } from '../engine/progress';
 import { findGame } from '../games/registry';
-import { GameHost } from './GameHost';
+import { GameHost, type LevelPlay } from './GameHost';
+import { LevelMap } from './LevelMap';
 import { Menu } from './Menu';
 import { ParentScreen } from './ParentScreen';
 import { loadProgress, saveProgress } from './storage';
@@ -27,17 +28,29 @@ function devLevel(): number | null {
   return Number.isInteger(value) && value >= 1 ? value : null;
 }
 
-type View = { readonly kind: 'menu' } | { readonly kind: 'game'; readonly id: string } | { readonly kind: 'parent' };
+type View =
+  | { readonly kind: 'menu' }
+  | { readonly kind: 'map'; readonly id: string; readonly jumpFrom: number | null }
+  | { readonly kind: 'game'; readonly id: string; readonly play: LevelPlay }
+  | { readonly kind: 'parent' };
+
+/** dev ?level=N: сразу уровень муравьёв (сложность N, seed N) как переигровка — прогресс не меняется. */
+function devView(): View {
+  const level = devLevel();
+  return level
+    ? { kind: 'game', id: 'ants', play: { spec: { difficulty: level, seed: level, variant: null }, number: level, replay: true } }
+    : { kind: 'menu' };
+}
 
 /**
- * Оболочка: решает, какой экран показан (меню → игра → меню, родительский экран).
+ * Оболочка: решает, какой экран показан. Поток: меню → карта игры → уровень → «Дальше» →
+ * карта (фишка прыгает на следующую точку) → …; домик в уровне — на карту, домик на карте — в меню.
  * Только она трогает хранилище: победа сохраняется сразу, ещё до награды,
- * чтобы закрытое на конфетти приложение открылось уже на следующем уровне.
+ * чтобы закрытое на конфетти приложение открылось уже с пройденным уровнем.
  */
 export function App() {
   const [progress, setProgress] = useState<Progress>(loadProgress);
-  // в dev ?level=N сразу открывает муравьёв на этом уровне
-  const [view, setView] = useState<View>(() => (devLevel() ? { kind: 'game', id: 'ants' } : { kind: 'menu' }));
+  const [view, setView] = useState<View>(devView);
   const onProgress = useCallback((next: Progress) => {
     saveProgress(next);
     setProgress(next);
@@ -64,10 +77,35 @@ export function App() {
     return <ParentScreen progress={progress} onProgress={onProgress} onBack={toMenu} />;
   }
 
-  const game = view.kind === 'game' ? findGame(view.id) : undefined;
-  if (game) {
-    return <GameHost game={game} progress={progress} onProgress={onProgress} onExit={toMenu} devLevel={devLevel()} />;
+  const game = view.kind === 'game' || view.kind === 'map' ? findGame(view.id) : undefined;
+  if (game && view.kind === 'game') {
+    const { play } = view;
+    const toMap = (jumped: boolean) => setView({ kind: 'map', id: game.id, jumpFrom: jumped ? play.number : null });
+    return (
+      <GameHost
+        key={`${game.id}:${play.number}:${play.replay}`}
+        game={game}
+        play={play}
+        progress={progress}
+        onProgress={onProgress}
+        onExit={() => toMap(false)}
+        // после новой победы фишка прыгает; после переигровки — нет
+        onDone={() => toMap(!play.replay)}
+      />
+    );
+  }
+  if (game && view.kind === 'map') {
+    return (
+      <LevelMap
+        key={game.id}
+        game={game}
+        progress={progress}
+        jumpFrom={view.jumpFrom}
+        onOpen={play => setView({ kind: 'game', id: game.id, play })}
+        onHome={toMenu}
+      />
+    );
   }
 
-  return <Menu onPlay={id => setView({ kind: 'game', id })} onParent={() => setView({ kind: 'parent' })} />;
+  return <Menu onPlay={id => setView({ kind: 'map', id, jumpFrom: null })} onParent={() => setView({ kind: 'parent' })} />;
 }
