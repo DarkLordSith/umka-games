@@ -13,6 +13,7 @@ import {
 import { antsByColor, applyMove, EMPTY, isWon, pixelsByColor, SLOT_COUNT } from '../../src/games/ants/logic';
 import { PICTURES } from '../../src/games/ants/pictures';
 import { canGetStuck, solve } from '../../src/games/ants/solver';
+import { LEVEL_BUDGET_MS, stableMs } from './helpers';
 import { BLACK } from '../../src/ui/palette';
 
 const LEVELS = Array.from({ length: 50 }, (_, index) => index + 1);
@@ -40,16 +41,18 @@ describe('генератор', () => {
     }
   });
 
-  it('уровни 1–50 решаемы, каждый генерируется и решается быстрее 200 мс', () => {
+  it(`уровни 1–50 решаемы, каждый генерируется и решается быстрее ${LEVEL_BUDGET_MS} мс`, () => {
     const slow: string[] = [];
     for (const level of LEVELS) {
-      const started = performance.now();
-      const state = makeLevel(level, seedFor(level));
-      const moves = solve(state);
-      const elapsed = performance.now() - started;
+      let state = makeLevel(1, 1);
+      let moves: number[] | null = null;
+      const elapsed = stableMs(() => {
+        state = makeLevel(level, seedFor(level));
+        moves = solve(state);
+      });
       expect(moves, `уровень ${level}`).not.toBeNull();
       expect(isWon(moves!.reduce((current, move) => applyMove(current, move)!, state))).toBe(true);
-      if (elapsed > 200) {
+      if (elapsed > LEVEL_BUDGET_MS) {
         slow.push(`уровень ${level}: ${elapsed.toFixed(0)} мс`);
       }
     }
@@ -89,18 +92,20 @@ describe('генератор', () => {
     }
   });
 
-  it('каждая картинка решаема на сложностях 1, 10, 30, 50; генерация ≤ 200 мс', () => {
+  it(`каждая картинка решаема на сложностях 1, 10, 30, 50; генерация ≤ ${LEVEL_BUDGET_MS} мс`, () => {
     const failed: string[] = [];
     const slow: string[] = [];
     for (const picture of PICTURES) {
       for (const level of [1, 10, 30, 50]) {
-        const started = performance.now();
-        const state = makeLevelFor(picture, level, level * 13 + 5);
-        const elapsed = performance.now() - started;
+        const seed = level * 13 + 5;
+        let state = makeLevelFor(picture, 1, 1);
+        const elapsed = stableMs(() => {
+          state = makeLevelFor(picture, level, seed);
+        });
         if (!solve(state)) {
           failed.push(`${picture.id} на ${level}`);
         }
-        if (elapsed > 200) {
+        if (elapsed > LEVEL_BUDGET_MS) {
           slow.push(`${picture.id} ${picture.width}×${picture.height} на ${level}: ${elapsed.toFixed(0)} мс`);
         }
       }
@@ -119,8 +124,9 @@ describe('генератор', () => {
     };
     const easy = histogram(1);
     const hard = histogram(40);
-    expect(easy[0]! + easy[1]!).toBe(200); // первые уровни — только 12 и 16
-    expect(easy[0]!).toBeGreaterThan(easy[1]!);
+    expect(easy[0]!).toBe(200); // первые уровни — только 12×12
+    const early = histogram(SAFE_LEVELS + 1);
+    expect(early[0]!).toBeGreaterThan(early[1]!);
     expect(hard[2]! + hard[3]!).toBeGreaterThan(150);
     expect(hard.filter(count => count > 0).length).toBeGreaterThanOrEqual(3);
     for (const level of [1, 20, 40]) {

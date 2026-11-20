@@ -162,13 +162,14 @@ const SIZE_SPREAD = 0.9;
 
 /**
  * Вес класса размера на сложности: чаще маленькие сетки (крупные квадратики) на низкой
- * сложности и мелкие — на высокой, но с разнообразием. Первые SAFE_LEVELS — только 12 и 16:
- * на больших сетках проверка «тупик невозможен» не успевает за разумное время.
+ * сложности и мелкие — на высокой, но с разнообразием. Первые SAFE_LEVELS — только 12×12:
+ * проверка «тупик невозможен» — полный перебор состояний, на 16×16 он уже ~100 мс на Mac
+ * (на iPhone и в CI — вдвое дольше), а на 12×12 — единицы мс. Новичку крупные квадратики и так лучше.
  */
 export function sizeWeights(level: number): number[] {
   const target = Math.min(SIZE_CLASSES.length - 1, Math.max(0, (level - 1) / SIZE_STEP));
   return SIZE_CLASSES.map((_, index) =>
-    level <= SAFE_LEVELS && index > 1 ? 0 : Math.exp(-((index - target) ** 2) / (2 * SIZE_SPREAD ** 2)),
+    level <= SAFE_LEVELS && index > 0 ? 0 : Math.exp(-((index - target) ** 2) / (2 * SIZE_SPREAD ** 2)),
   );
 }
 
@@ -225,8 +226,12 @@ export function scaleBlocks(params: LevelParams, picture: Picture): LevelParams 
   return { ...params, minBlock, maxBlock };
 }
 
-/** Площадь, до которой проверяем «тупик невозможен» на безопасных уровнях (16×16). */
-const SAFE_CHECK_MAX_CELLS = 256;
+/**
+ * Площадь, до которой проверяем «тупик невозможен» на безопасных уровнях (12×12). makeLevel
+ * на них и даёт только 12×12; бо́льшая картинка, заданная явно (makeLevelFor), получает
+ * уровень 1 без этой проверки — решаемость проверяется всегда.
+ */
+const SAFE_CHECK_MAX_CELLS = 144;
 
 /**
  * Уровень по сложности (с 1) и seed. Детерминированно: тот же (level, seed) → тот же уровень.
