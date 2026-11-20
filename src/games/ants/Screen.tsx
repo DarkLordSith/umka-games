@@ -1,13 +1,13 @@
 // Экран муравьёв: DOM-раскладка (колонки, слоты, кнопки) + canvas-слой (картинка и муравьи).
 // Сверху вниз: фон под статус-баром → картинка → муравейник и 5 слотов →
-// стопки (3 ряда) → нижняя полоса с «заново» и Undo.
+// стопки (3 ряда) → пустая зона внизу (--chrome-bottom): там кнопки оболочки — Undo, «заново», домик.
 //
-// Экран по контракту (engine/types.ts): состояние, Undo и победу ведёт оболочка.
+// Экран по контракту (engine/types.ts): состояние, Undo, подсказку и победу ведёт оболочка.
 // Экран только анимирует: свой ход он узнаёт по pending (колонка, которую тапнули),
 // любое другое изменение state (Undo, «заново») — мгновенный сброс картинки.
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { GameScreenProps } from '../../engine/types';
-import { RestartIcon, UndoIcon } from '../../ui/icons';
+import { HintHand } from '../../ui/HintHand';
 import { GAME_COLORS } from '../../ui/palette';
 import { type AntsMove, type AntsState, type Block, SLOT_COUNT, tap } from './logic';
 import { AntsRenderer, type Layout } from './render';
@@ -31,7 +31,7 @@ function relativeRect(element: Element, root: Element) {
   return { x: box.left - base.left, y: box.top - base.top, w: box.width, h: box.height };
 }
 
-export function AntsScreen({ state, start, won, stuck, canUndo, onMove, onUndo, onRestart, onWinShown }: AntsScreenProps) {
+export function AntsScreen({ state, start, won, hint, onMove, onWinShown }: AntsScreenProps) {
   const stateRef = useRef(state);
   stateRef.current = state;
   /** Состояние, которое сейчас показывает рендер (отличие от state = что-то произошло). */
@@ -262,6 +262,19 @@ export function AntsScreen({ state, start, won, stuck, canUndo, onMove, onUndo, 
     rendererRef.current?.reset(state);
   }, [state]);
 
+  // Подсказка: рука показывает на верхний блок колонки из hint (кончик пальца — в центр блока).
+  const [hand, setHand] = useState<{ x: number; y: number } | null>(null);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const block = hint === null ? null : columnRefs.current[hint]?.querySelector('.ants-block');
+    if (!root || !block) {
+      setHand(null);
+      return;
+    }
+    const rect = relativeRect(block, root);
+    setHand({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 });
+  }, [hint, state]);
+
   // Победа: ждём, пока муравьи добегут, показываем картинку целиком — дальше награда оболочки.
   useEffect(() => {
     if (!won) {
@@ -354,30 +367,12 @@ export function AntsScreen({ state, start, won, stuck, canUndo, onMove, onUndo, 
             </div>
           ))}
         </div>
-      {/* низ без подложки: стопки ниже 3-го ряда растворяются в «тумане»;
-          «заново» — в левом нижнем углу, Undo — в правом, прижаты к safe-area */}
+      {/* зона кнопок оболочки: здесь пусто, 4-й ряд стопок и ниже растворяются в «тумане» */}
       <div className="ants-buttons">
         <div className="ants-fog" aria-hidden="true" />
-        <button
-          type="button"
-          className="ants-restart"
-          aria-label="заново"
-          disabled={won || !canUndo}
-          onPointerDown={onRestart}
-        >
-          <RestartIcon />
-        </button>
-        <button
-          type="button"
-          className={stuck ? 'ants-undo is-pulsing' : 'ants-undo'}
-          aria-label="назад"
-          disabled={won || !canUndo}
-          onPointerDown={onUndo}
-        >
-          <UndoIcon />
-        </button>
       </div>
       <canvas className="ants-canvas" ref={canvasRef} />
+      {hand ? <HintHand x={hand.x} y={hand.y} /> : null}
     </div>
   );
 }

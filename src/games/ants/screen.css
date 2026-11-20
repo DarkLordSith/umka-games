@@ -9,8 +9,6 @@
   --column: min(72px, calc((100vw - 32px - var(--gap) * 3) / 4));
   /* высота блока от высоты экрана: 50 на SE, до 60 на больших; верхний + запас 5px = цель ≥ 60 pt */
   --block-h: clamp(50px, calc(100vh * 0.075), 60px);
-  /* зона кнопок: Undo 74 + зазор сверху; прижата к safe-area снизу */
-  --buttons: calc(74px + 8px + max(6px, var(--safe-bottom)));
   position: absolute;
   inset: 0;
   display: grid;
@@ -201,12 +199,13 @@
   font-size: 23px;
 }
 
-/* Низ без подложки: только общий фон. «Туман» растворяет 4-й ряд стопок и ниже,
-   кнопки — поверх него в нижних углах, прижаты к safe-area. */
+/* Низ без подложки: только общий фон. «Туман» растворяет 4-й ряд стопок и ниже;
+   кнопки оболочки (GameHost) лежат поверх него в нижних углах. */
 .ants-buttons {
   position: relative;
   z-index: 1;
-  height: var(--buttons);
+  /* зона кнопок оболочки (base.css): игра её не занимает */
+  height: var(--chrome-bottom);
 }
 
 .ants-fog {
@@ -214,68 +213,6 @@
   inset: 0;
   pointer-events: none;
   background: linear-gradient(to bottom, var(--bg-clear) 0, var(--bg) 44px);
-}
-
-.ants-restart,
-.ants-undo {
-  position: absolute;
-  z-index: 1;
-}
-
-.ants-restart {
-  left: max(14px, var(--safe-left));
-  bottom: max(6px, var(--safe-bottom));
-}
-
-.ants-undo {
-  right: max(14px, var(--safe-right));
-  bottom: max(6px, var(--safe-bottom));
-}
-
-.ants-undo {
-  width: 74px;
-  height: 74px;
-  border-radius: 50%;
-  padding: 16px;
-  background: var(--white);
-  color: var(--sky);
-  box-shadow:
-    inset 0 -6px 0 var(--shadow),
-    0 4px 0 var(--shadow);
-}
-
-.ants-undo.is-pulsing {
-  animation: undo-pulse 0.9s ease-in-out infinite;
-  background: var(--game-yellow);
-  color: var(--ink);
-}
-
-@keyframes undo-pulse {
-  50% {
-    transform: scale(1.12);
-  }
-}
-
-.ants-restart {
-  width: 44px;
-  height: 44px;
-  padding: 9px;
-  border-radius: 50%;
-  background: var(--panel);
-  color: var(--ink);
-}
-
-/* зона касания больше видимой кнопки (60 pt) */
-.ants-restart::before {
-  content: '';
-  position: absolute;
-  inset: -8px;
-}
-
-/* неактивные кнопки остаются непрозрачными (под ними — растворяющийся 4-й ряд), бледнеет иконка */
-.ants-undo:disabled svg,
-.ants-restart:disabled svg {
-  opacity: 0.35;
 }
 
 /* --- полёт блока в слот --- */

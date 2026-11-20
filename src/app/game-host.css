@@ -1,3 +1,83 @@
+/* Общий экран игры: экран игры + кнопки оболочки внизу + награда. */
+
+.game-host {
+  position: absolute;
+  inset: 0;
+}
+
+/* Кнопки — поверх экрана игры, в нижней зоне (--chrome-bottom), которую игра оставляет пустой.
+   Сам слой касания пропускает — ловят только кнопки. */
+.game-chrome {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.game-chrome > * {
+  position: absolute;
+  bottom: max(6px, var(--safe-bottom));
+  pointer-events: auto;
+}
+
+/* домик и «заново» — маленькие, слева; Undo — крупная, справа */
+.chrome-home,
+.chrome-restart {
+  width: 44px;
+  height: 44px;
+  padding: 9px;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.chrome-home {
+  left: max(14px, var(--safe-left));
+}
+
+.chrome-restart {
+  left: calc(max(14px, var(--safe-left)) + 44px + 18px);
+}
+
+/* зона касания «заново» больше видимой кнопки (60 pt) */
+.chrome-restart::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+.chrome-undo {
+  right: max(14px, var(--safe-right));
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  padding: 16px;
+  background: var(--white);
+  color: var(--sky);
+  box-shadow:
+    inset 0 -6px 0 var(--shadow),
+    0 4px 0 var(--shadow);
+}
+
+/* тупик — Undo пульсирует жёлтым */
+.chrome-undo.is-pulsing {
+  animation: undo-pulse 0.9s ease-in-out infinite;
+  background: var(--game-yellow);
+  color: var(--ink);
+}
+
+@keyframes undo-pulse {
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+/* неактивные — непрозрачные (под ними растворяется игра), бледнеет только иконка */
+.chrome-undo:disabled svg,
+.chrome-restart:disabled svg {
+  opacity: 0.35;
+}
+
 /* Награда за уровень: конфетти поверх экрана игры, тап в любом месте — следующий уровень. */
 .win-overlay {
   position: absolute;

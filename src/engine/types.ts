@@ -2,20 +2,20 @@
 // модуль в src/games/<id>/index.ts и строка в src/games/registry.ts.
 import type { ComponentType } from 'react';
 
-/** Что экран игры получает от оболочки. Сессию, Undo и награду ведёт оболочка. */
+/**
+ * Что экран игры получает от оболочки. Сессию, Undo, «заново», выход и награду ведёт
+ * оболочка (её кнопки — внизу экрана, в зоне --chrome-bottom, которую игра оставляет пустой).
+ */
 export interface GameScreenProps<State, Move> {
   /** Текущий снимок уровня. */
   readonly state: State;
   /** Стартовый снимок уровня (например, показать картинку целиком на победе). */
   readonly start: State;
   readonly won: boolean;
-  /** Тупик: к победе не пройти — экран пульсирует Undo. */
-  readonly stuck: boolean;
-  readonly canUndo: boolean;
+  /** Подсказка: экран показывает рукой (ui/HintHand), что нажать для этого хода. null — нет. */
+  readonly hint: Move | null;
   /** Сделать ход. false — ход невозможен (экран сам показывает «нельзя»). */
   readonly onMove: (move: Move) => boolean;
-  readonly onUndo: () => void;
-  readonly onRestart: () => void;
   /** Экран доиграл свою анимацию победы — оболочка показывает награду и ждёт тапа. */
   readonly onWinShown: () => void;
 }

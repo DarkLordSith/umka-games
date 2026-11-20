@@ -1,0 +1,55 @@
+.menu {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: var(--top-zone) minmax(0, 1fr) auto;
+}
+
+.menu-games {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 24px max(20px, var(--safe-right)) 24px max(20px, var(--safe-left));
+}
+
+/* иконка игры — от 120 pt; «конфетная» кнопка */
+.menu-game {
+  width: min(42vw, 168px);
+  min-width: 128px;
+  aspect-ratio: 1;
+  border-radius: 36px;
+  background: var(--white);
+  padding: 8px;
+  box-shadow:
+    inset 0 -8px 0 var(--shadow),
+    0 6px 0 var(--shadow);
+  transition: transform 0.12s ease-out;
+}
+
+.menu-game:active {
+  transform: scale(0.94);
+}
+
+.menu-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 0 max(16px, var(--safe-right)) max(14px, var(--safe-bottom)) max(16px, var(--safe-left));
+}
+
+.menu-album {
+  width: 96px;
+  height: 96px;
+}
+
+/* вход для родителей: маленький и бледный, держать 3 с */
+.menu-parent {
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+  border-radius: 50%;
+  color: var(--panel);
+  background: var(--bg);
+}

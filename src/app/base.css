@@ -11,6 +11,8 @@
   --safe-right: env(safe-area-inset-right, 0px);
   /* минимальная цель касания из CLAUDE.md */
   --tap: 60px;
+  /* зона кнопок оболочки внизу экрана игры (Undo 74 pt + зазор + safe-area): игра оставляет её пустой */
+  --chrome-bottom: calc(74px + 8px + max(6px, var(--safe-bottom)));
 }
 
 *,

@@ -9,6 +9,8 @@ import {
   parseProgress,
   PROGRESS_VERSION,
   withGame,
+  withoutGame,
+  withSettings,
 } from '../src/engine/progress';
 import { makeLevel, pictureIndex } from '../src/games/ants/generator';
 
@@ -110,5 +112,24 @@ describe('прогресс', () => {
     const progress = withGame(defaultProgress(), 'ants', { difficulty: 5, streak: 2, won: 9, seed: 10 });
     saveProgress(progress, storage);
     expect(loadProgress(storage)).toEqual(progress);
+  });
+});
+
+describe('родительский экран: сброс и настройки', () => {
+  it('сброс игры убирает только её запись', () => {
+    const progress = withGame(withGame(defaultProgress(), 'ants', { difficulty: 9, streak: 0, won: 8, seed: 9 }), 'other', {
+      difficulty: 2,
+      streak: 0,
+      won: 1,
+      seed: 2,
+    });
+    const reset = withoutGame(progress, 'ants');
+    expect(reset.games.ants).toBeUndefined();
+    expect(reset.games.other).toEqual(progress.games.other);
+    expect(gameProgress(reset, 'ants', 1)).toEqual({ difficulty: 1, streak: 0, won: 0, seed: 1 });
+  });
+
+  it('настройки меняются по одной', () => {
+    expect(withSettings(defaultProgress(), { voice: false }).settings).toEqual({ sfx: true, voice: false });
   });
 });
