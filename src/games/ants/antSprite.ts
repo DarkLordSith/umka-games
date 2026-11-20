@@ -6,11 +6,14 @@
 // тот же «конфетный» стиль, что у блоков.
 //
 // Атлас: при старте (и при смене размера клетки) каждый кадр рисуется ОДИН раз
-// в offscreen canvas — 8 цветов × 4 направления × 3 кадра ходьбы. В кадре игры
+// в offscreen canvas — все игровые цвета × 4 направления × 3 кадра ходьбы. В кадре игры
 // муравей — это один drawImage из атласа, без рисования лапок и поворотов.
 // Вид сверху симметричен, поэтому направления — просто повёрнутые копии
 // (влево — не «вверх ногами»).
-import { GAME_COLORS, UI_COLORS } from '../../ui/palette';
+import { BLACK, GAME_COLORS, UI_COLORS } from '../../ui/palette';
+
+/** Тело чёрного муравья: контур светлый, блик ярче — иначе он сливается с тёмными лапками и контуром. */
+const DARK_BODY = GAME_COLORS[BLACK]!.hex;
 
 /** Направления в порядке поворота на 90° по часовой: вправо, вниз, влево, вверх. */
 export const DIRECTIONS = ['right', 'down', 'left', 'up'] as const;
@@ -36,6 +39,8 @@ export function directionOf(dx: number, dy: number): Direction {
 export function drawCartoonAnt(context: CanvasRenderingContext2D, body: string, length: number, frame: number): void {
   const L = length;
   const outline = Math.max(1, L * 0.035);
+  const dark = body === DARK_BODY;
+  const rim = dark ? UI_COLORS.panel : UI_COLORS.ink;
   // смещение «треноги» A (передняя левая, средняя правая, задняя левая); у B — обратное
   const swing = (frame - 1) * L * 0.045;
   context.lineCap = 'round';
@@ -84,7 +89,7 @@ export function drawCartoonAnt(context: CanvasRenderingContext2D, body: string, 
     context.fillStyle = body;
     context.fill();
     context.lineWidth = outline;
-    context.strokeStyle = UI_COLORS.ink;
+    context.strokeStyle = rim;
     context.stroke();
   };
   blob(-L * 0.26, L * 0.24, L * 0.19);
@@ -93,10 +98,15 @@ export function drawCartoonAnt(context: CanvasRenderingContext2D, body: string, 
 
   // мягкий блик на брюшке и голове
   context.fillStyle = UI_COLORS.white;
-  context.globalAlpha = 0.35;
+  context.globalAlpha = dark ? 0.6 : 0.35;
   context.beginPath();
   context.ellipse(-L * 0.3, -L * 0.08, L * 0.1, L * 0.05, -0.3, 0, Math.PI * 2);
   context.fill();
+  if (dark) {
+    context.beginPath();
+    context.ellipse(L * 0.17, -L * 0.1, L * 0.05, L * 0.03, -0.3, 0, Math.PI * 2);
+    context.fill();
+  }
   context.globalAlpha = 1;
 
   // большие глаза, смотрят вперёд: белок, зрачок, блик
@@ -121,7 +131,7 @@ export function drawCartoonAnt(context: CanvasRenderingContext2D, body: string, 
   }
 }
 
-/** Заготовленные кадры: 8 цветов × 4 направления × 3 кадра в одном offscreen canvas. */
+/** Заготовленные кадры: все игровые цвета × 4 направления × 3 кадра в одном offscreen canvas. */
 export class AntAtlas {
   private readonly canvas: HTMLCanvasElement;
   /** Сторона клетки атласа в пикселях устройства. */

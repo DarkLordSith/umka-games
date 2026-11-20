@@ -6,9 +6,12 @@ import { Menu } from './Menu';
 import { ParentScreen } from './ParentScreen';
 import { loadProgress, saveProgress } from './storage';
 
-/** Превью для отбраковки (только dev): ?dev=ants. В production-сборку не попадает. */
+/** Превью для отбраковки (только dev): ?dev=ants — муравьи, ?dev=pictures — картинки. В production-сборку не попадают. */
 const AntsPreview = import.meta.env.DEV
   ? lazy(() => import('../games/ants/AntsPreview').then(module => ({ default: module.AntsPreview })))
+  : null;
+const PicturesPreview = import.meta.env.DEV
+  ? lazy(() => import('../games/ants/PicturesPreview').then(module => ({ default: module.PicturesPreview })))
   : null;
 
 function devPage(): string | null {
@@ -45,6 +48,14 @@ export function App() {
     return (
       <Suspense fallback={null}>
         <AntsPreview />
+      </Suspense>
+    );
+  }
+
+  if (PicturesPreview && devPage() === 'pictures') {
+    return (
+      <Suspense fallback={null}>
+        <PicturesPreview />
       </Suspense>
     );
   }

@@ -1,9 +1,12 @@
-// Картинки муравьёв: пиксель-арт 16×16 строками символов. Рисуются кодом, свои.
+// Картинки муравьёв: пиксель-арт строками символов. Рисуются кодом, свои.
+// Первые 10 — 16×16 строками здесь, остальные — из фигур разных размеров (shapePictures.ts).
 // '.' — пусто (фон картинки пустой с самого начала). Буквы — цвета из src/ui/palette.ts:
-//   R красный  O оранжевый  Y жёлтый  G зелёный  L голубой  B синий  P фиолетовый  K розовый
+//   R красный  O оранжевый  Y жёлтый  G зелёный  L голубой  B синий  P фиолетовый  K розовый  X чёрный
 // Простые сюжеты и крупные однотонные области: ребёнка цепляет процесс поедания, а не детали.
 import { GAME_COLORS, type GameColorId } from '../../ui/palette';
 import { EMPTY } from './logic';
+import { SHAPE_SOURCES } from './shapePictures';
+import { rasterize } from './shapes';
 
 const LETTERS: Readonly<Record<string, GameColorId>> = {
   R: 'red',
@@ -14,6 +17,7 @@ const LETTERS: Readonly<Record<string, GameColorId>> = {
   B: 'blue',
   P: 'purple',
   K: 'pink',
+  X: 'black',
 };
 
 export interface PictureSource {
@@ -29,8 +33,8 @@ export interface Picture {
   readonly pixels: readonly number[];
 }
 
-/** Порядок — по кругу в генераторе: от простых (2–3 цвета, мало внутренних областей) к сложным. */
-export const PICTURE_SOURCES: readonly PictureSource[] = [
+/** Первые 16×16, строками. */
+const STRING_SOURCES: readonly PictureSource[] = [
   {
     id: 'apple',
     rows: [
@@ -265,5 +269,11 @@ export function parsePicture(source: PictureSource): Picture {
   }
   return { id: source.id, width, height: source.rows.length, pixels };
 }
+
+/** Все картинки: строковые и из фигур (растеризованные в те же строки). */
+export const PICTURE_SOURCES: readonly PictureSource[] = [
+  ...STRING_SOURCES,
+  ...SHAPE_SOURCES.map(source => ({ id: source.id, rows: rasterize(source) })),
+];
 
 export const PICTURES: readonly Picture[] = PICTURE_SOURCES.map(parsePicture);

@@ -75,8 +75,10 @@ function deltaE(a: string, b: string): number {
 const MIN_DELTA_E = 30;
 
 describe('игровые цвета', () => {
-  it('не больше 8, id и значения уникальны', () => {
-    expect(GAME_COLORS.length).toBeLessThanOrEqual(8);
+  it('8 цветов + чёрный, id и значения уникальны', () => {
+    expect(GAME_COLORS.length).toBeLessThanOrEqual(9);
+    expect(GAME_COLORS.filter(color => color.id !== 'black').length).toBeLessThanOrEqual(8);
+    expect(GAME_COLORS.map(color => color.id)).toContain('black');
     expect(new Set(GAME_COLORS.map(color => color.id)).size).toBe(GAME_COLORS.length);
     expect(new Set(GAME_COLORS.map(color => color.hex.toLowerCase())).size).toBe(GAME_COLORS.length);
   });

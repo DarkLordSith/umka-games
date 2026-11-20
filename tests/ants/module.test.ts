@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { levelResult, sessionMove, sessionState, startSession } from '../../src/engine/session';
 import { antsGame } from '../../src/games/ants';
-import { pictureIndex } from '../../src/games/ants/generator';
-import { PICTURES } from '../../src/games/ants/pictures';
 import { findGame, GAMES } from '../../src/games/registry';
 
 describe('муравьи по контракту', () => {
@@ -20,11 +18,5 @@ describe('муравьи по контракту', () => {
     }
     expect(antsGame.isWon(sessionState(session))).toBe(true);
     expect(levelResult(session).clean).toBe(true);
-  });
-
-  it('картинка — по seed: подряд идущие seed дают разные картинки по кругу', () => {
-    const ids = Array.from({ length: PICTURES.length }, (_, index) => pictureIndex(index + 1));
-    expect(new Set(ids).size).toBe(PICTURES.length);
-    expect(pictureIndex(PICTURES.length + 1)).toBe(pictureIndex(1));
   });
 });

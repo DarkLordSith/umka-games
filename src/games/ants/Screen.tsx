@@ -58,7 +58,7 @@ export function AntsScreen({ state, start, won, hint, onMove, onWinShown }: Ants
   const lengths = useRef<number[]>(start.columns.map(column => column.length));
   const rendererRef = useRef<AntsRenderer | null>(null);
 
-  // Раскладка: картинка — самый большой квадрат с целым размером клетки, остальное — из DOM.
+  // Раскладка: картинка — самая большая при целом размере клетки, остальное — из DOM.
   const measure = useCallback(() => {
     const root = rootRef.current;
     const picture = pictureRef.current;
@@ -73,10 +73,11 @@ export function AntsScreen({ state, start, won, hint, onMove, onWinShown }: Ants
     const style = getComputedStyle(parent);
     const width = area.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const height = area.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
-    const cells = startRef.current.width;
-    const size = Math.max(cells, Math.floor(Math.min(width, height) / cells) * cells);
-    picture.style.width = `${size}px`;
-    picture.style.height = `${size}px`;
+    // сетка бывает и прямоугольной (20×16): клетка — целая, наибольшая, при которой картинка влезает
+    const { width: columns, height: rows } = startRef.current;
+    const cell = Math.max(1, Math.floor(Math.min(width / columns, height / rows)));
+    picture.style.width = `${cell * columns}px`;
+    picture.style.height = `${cell * rows}px`;
     const holeRect = relativeRect(hole, root);
     const layout: Layout = {
       picture: relativeRect(picture, root),

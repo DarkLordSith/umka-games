@@ -34,6 +34,32 @@ describe('доступные пиксели', () => {
     expect(isAccessible(state, 1, 1)).toBe(false);
   });
 
+  it('замкнутая дырка не открывает соседей: муравьи не ходят сквозь стену', () => {
+    // синий — в дырке внутри красного кольца, дырка не связана с внешним краем
+    const ring = ['RRRRR', 'R...R', 'R.B.R', 'R...R', 'RRRRR'];
+    const state = makeState(ring, []);
+    expect(isAccessible(state, 2, 2)).toBe(false);
+    expect(canEat(state, B)).toBe(false);
+    // внутренняя сторона кольца тоже закрыта: доступна только внешняя рамка
+    expect(accessiblePixels(state)).toHaveLength(16);
+    // прогрызли кольцо — дырка связана с краем, синий открылся
+    const opened = makeState(['RR.RR', 'R...R', 'R.B.R', 'R...R', 'RRRRR'], []);
+    expect(isAccessible(opened, 2, 2)).toBe(true);
+  });
+
+  it('замкнутая дырка открывается прямо во время хода', () => {
+    // синий над замкнутой дыркой; красный съест ближайший к муравейнику пиксель — низ кольца,
+    // дырка свяжется с краем, и синий в той же раздаче доберётся до середины через неё
+    const state = makeState(['.....', '.RRR.', '.RBR.', '.R.R.', '.RRR.'], [[block(B, 1)], [block(R, 1)]]);
+    const waiting = tap(state, 0)!;
+    expect(waiting.events).toEqual([]); // по старому правилу (сосед пуст) синий съел бы сразу
+    const after = tap(waiting.state, 1)!;
+    expect(after.events).toEqual([
+      { slot: 1, x: 2, y: 4 },
+      { slot: 0, x: 2, y: 2 },
+    ]);
+  });
+
   it('пустая клетка недоступна', () => {
     const state = makeState(['R.R'], []);
     expect(isAccessible(state, 1, 0)).toBe(false);

@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { canUndo, createHistory, current, push, undo } from '../../src/engine/history';
-import { levelParams, makeLevel, onionLayers, outlinePicture, SAFE_LEVELS } from '../../src/games/ants/generator';
+import {
+  levelParams,
+  makeLevel,
+  makeLevelFor,
+  onionLayers,
+  outlinePicture,
+  pickPicture,
+  SAFE_LEVELS,
+  sizeClass,
+} from '../../src/games/ants/generator';
 import { antsByColor, applyMove, EMPTY, isWon, pixelsByColor, SLOT_COUNT } from '../../src/games/ants/logic';
 import { PICTURES } from '../../src/games/ants/pictures';
 import { canGetStuck, solve } from '../../src/games/ants/solver';
+import { LEVEL_BUDGET_MS, stableMs } from './helpers';
+import { BLACK } from '../../src/ui/palette';
 
 const LEVELS = Array.from({ length: 50 }, (_, index) => index + 1);
 const seedFor = (level: number) => level * 1000 + 7;
@@ -30,16 +41,18 @@ describe('генератор', () => {
     }
   });
 
-  it('уровни 1–50 решаемы, каждый генерируется и решается быстрее 200 мс', () => {
+  it(`уровни 1–50 решаемы, каждый генерируется и решается быстрее ${LEVEL_BUDGET_MS} мс`, () => {
     const slow: string[] = [];
     for (const level of LEVELS) {
-      const started = performance.now();
-      const state = makeLevel(level, seedFor(level));
-      const moves = solve(state);
-      const elapsed = performance.now() - started;
+      let state = makeLevel(1, 1);
+      let moves: number[] | null = null;
+      const elapsed = stableMs(() => {
+        state = makeLevel(level, seedFor(level));
+        moves = solve(state);
+      });
       expect(moves, `уровень ${level}`).not.toBeNull();
       expect(isWon(moves!.reduce((current, move) => applyMove(current, move)!, state))).toBe(true);
-      if (elapsed > 200) {
+      if (elapsed > LEVEL_BUDGET_MS) {
         slow.push(`уровень ${level}: ${elapsed.toFixed(0)} мс`);
       }
     }
@@ -48,8 +61,7 @@ describe('генератор', () => {
 
   it(`сложность 1–${SAFE_LEVELS} — без возможного тупика на любой картинке`, () => {
     for (let level = 1; level <= SAFE_LEVELS; level++) {
-      // seed 1…10 — все картинки по кругу (картинку выбирает seed)
-      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]) {
         expect(canGetStuck(makeLevel(level, seed)), `уровень ${level}, seed ${seed}`).toBe(false);
       }
     }
@@ -66,18 +78,61 @@ describe('генератор', () => {
     }
   });
 
-  it('обводка: внешний слой — новый цвет, внутренние пиксели не тронуты', () => {
+  it('обводка: внешний слой — чёрный, внутренние пиксели не тронуты', () => {
     for (const picture of PICTURES) {
       const outlined = outlinePicture(picture);
       const layers = onionLayers(picture);
       const ring = new Set(outlined.pixels.filter((_, index) => layers[index] === 0));
-      expect(ring.size, picture.id).toBe(1);
-      expect(picture.pixels, picture.id).not.toContain([...ring][0]);
+      expect([...ring], picture.id).toEqual([BLACK]);
       outlined.pixels.forEach((cell, index) => {
         if (layers[index]! > 0 || cell === EMPTY) {
           expect(cell).toBe(picture.pixels[index]);
         }
       });
+    }
+  });
+
+  it(`каждая картинка решаема на сложностях 1, 10, 30, 50; генерация ≤ ${LEVEL_BUDGET_MS} мс`, () => {
+    const failed: string[] = [];
+    const slow: string[] = [];
+    for (const picture of PICTURES) {
+      for (const level of [1, 10, 30, 50]) {
+        const seed = level * 13 + 5;
+        let state = makeLevelFor(picture, 1, 1);
+        const elapsed = stableMs(() => {
+          state = makeLevelFor(picture, level, seed);
+        });
+        if (!solve(state)) {
+          failed.push(`${picture.id} на ${level}`);
+        }
+        if (elapsed > LEVEL_BUDGET_MS) {
+          slow.push(`${picture.id} ${picture.width}×${picture.height} на ${level}: ${elapsed.toFixed(0)} мс`);
+        }
+      }
+    }
+    expect(failed).toEqual([]);
+    expect(slow).toEqual([]);
+  });
+
+  it('размер сетки растёт со сложностью, но с разнообразием; подряд одна картинка не идёт', () => {
+    const histogram = (level: number) => {
+      const counts = [0, 0, 0, 0];
+      for (let seed = 1; seed <= 200; seed++) {
+        counts[sizeClass(PICTURES[pickPicture(level, seed)]!)]!++;
+      }
+      return counts;
+    };
+    const easy = histogram(1);
+    const hard = histogram(40);
+    expect(easy[0]!).toBe(200); // первые уровни — только 12×12
+    const early = histogram(SAFE_LEVELS + 1);
+    expect(early[0]!).toBeGreaterThan(early[1]!);
+    expect(hard[2]! + hard[3]!).toBeGreaterThan(150);
+    expect(hard.filter(count => count > 0).length).toBeGreaterThanOrEqual(3);
+    for (const level of [1, 20, 40]) {
+      for (let seed = 2; seed <= 200; seed++) {
+        expect(pickPicture(level, seed)).not.toBe(pickPicture(level, seed - 1));
+      }
     }
   });
 
