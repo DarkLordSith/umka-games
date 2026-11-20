@@ -41,12 +41,14 @@
 - `npm run build` — сборка в `dist/`.
 - `npm run preview` — проверка сборки, в том числе PWA и офлайн.
 - `npm test` — Vitest.
-- `npm run typecheck` — `tsc --noEmit`.
+- `npm run typecheck` — `tsc --noEmit` для приложения, конфига/скриптов и тестов.
+- `npm run icons` — перегенерировать иконки PWA.
 
 ## Структура
 > План. Поддерживай раздел в актуальном виде, когда меняешь структуру.
 
 - `src/main.tsx` — вход, регистрация service worker.
+- `src/app/base.css` — базовые стили и iOS-защиты (safe-area, верхняя зона `.sky`, без зума и «резинки»); `src/app/ios.ts` — гашение щипка и двойного тапа.
 - `src/app/` — оболочка: меню, экран игры, альбом, родительский экран. Только она трогает хранилище и решает, какой экран показан.
 - `src/engine/` — **чистый TypeScript без React и DOM:** контракт игры (`types.ts`), история и Undo (`history.ts`), сессия уровня (`session.ts`), адаптивная сложность (`difficulty.ts`), сидируемый генератор случайных чисел (`rng.ts`), прогресс и миграции (`progress.ts`).
 - `src/audio/` — эффекты (`sfx.ts`), голос (`voice.ts`, список фраз `phrases.ts`), разблокировка звука первым касанием.
@@ -54,7 +56,8 @@
 - `src/ui/` — общие компоненты (крупная кнопка, долгое нажатие, рука-подсказка) и палитра.
 - `src/games/<id>/` — модуль игры: `index.ts` (`GameModule`), `logic.ts`, `generator.ts`, `solver.ts`, `Screen.tsx`, свои ассеты. `src/games/registry.ts` — список игр в меню.
 - `public/voice/` — записи голоса, `<id>.m4a`.
-- `tests/` — Vitest; `tests/fixtures/` — сохранённые прогрессы прошлых версий.
+- `public/icons/` — иконки PWA, генерирует `npm run icons` (`scripts/icons.ts`, SVG → PNG через resvg, цвета из палитры).
+- `tests/` — Vitest (свой `tests/tsconfig.json` с типами Node); `tests/fixtures/` — сохранённые прогрессы прошлых версий.
 
 ## Контракт игры
 Черновик, точную форму задаёт задача каркаса «engine/core». Если меняешь контракт — обнови этот раздел.
