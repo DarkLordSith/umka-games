@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAudio } from '../audio/useAudio';
 import type { LevelSpec } from '../engine/types';
 import { nextDifficulty } from '../engine/difficulty';
-import { gameProgress, type Progress, withGame } from '../engine/progress';
+import { gameProgress, type Progress, withGame, withNewSticker } from '../engine/progress';
 import {
   levelResult,
   type Session,
@@ -115,7 +115,7 @@ export function GameHost({ game, play, progress, onProgress, onExit, onDone }: G
 
   /**
    * Уровень пройден: сразу, ещё до награды, сохраняются запись уровня (для карты
-   * и переигровки), новая сложность и следующий seed. Переигровка прогресс не трогает.
+   * и переигровки), новая сложность, следующий seed и наклейка. Переигровка прогресс не трогает.
    */
   const finish = (finished: Session<unknown>) => {
     if (play.replay) {
@@ -124,12 +124,15 @@ export function GameHost({ game, play, progress, onProgress, onExit, onDone }: G
     const result = levelResult(finished);
     const saved = gameProgress(progressRef.current, game.id, game.startDifficulty);
     const adapted = nextDifficulty({ difficulty: play.spec.difficulty, streak: saved.streak }, result.clean, game.minDifficulty);
+    // 1 пройденный уровень = 1 наклейка; прилетит в альбом на карте
     onProgress(
-      withGame(progressRef.current, game.id, {
-        ...adapted,
-        seed: play.spec.seed + 1,
-        levels: [...saved.levels, play.spec],
-      }),
+      withNewSticker(
+        withGame(progressRef.current, game.id, {
+          ...adapted,
+          seed: play.spec.seed + 1,
+          levels: [...saved.levels, play.spec],
+        }),
+      ),
     );
   };
 

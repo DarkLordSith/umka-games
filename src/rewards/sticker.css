@@ -1,0 +1,21 @@
+/* Наклейка: мягкая тень, как у бумажной наклейки на странице. */
+.sticker {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 3px 0 var(--shadow));
+}
+
+.sticker.is-silhouette {
+  filter: none;
+  opacity: 0.7;
+}
+
+/* Полёт новой наклейки: поверх карты по центру, касания проходят сквозь. */
+.sticker-flight {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}

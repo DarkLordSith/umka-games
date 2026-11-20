@@ -1,0 +1,88 @@
+/* Альбом: страницы листаются пальцем по горизонтали, «щёлкают» по странице. */
+
+.album {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: var(--top-zone) minmax(0, 1fr) auto;
+}
+
+.album-pages {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior: contain;
+  touch-action: pan-x;
+  scrollbar-width: none;
+}
+
+.album-pages::-webkit-scrollbar {
+  display: none;
+}
+
+.album-page {
+  flex: 0 0 100%;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 10px;
+  padding: 18px max(18px, var(--safe-right)) 12px max(18px, var(--safe-left));
+  margin: 0;
+}
+
+/* пустое место: пунктир и блёклый силуэт того, что здесь появится */
+.album-slot {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  border-radius: 22px;
+  border: 3px dashed var(--panel);
+  touch-action: pan-x;
+}
+
+.album-slot.is-owned {
+  border: 0;
+  background: var(--white);
+  box-shadow: inset 0 -5px 0 var(--shadow);
+}
+
+.album-slot svg {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.album-dots {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 6px 0 calc(max(14px, var(--safe-bottom)) + 70px);
+}
+
+.album-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--panel);
+}
+
+.album-dot.is-active {
+  background: var(--sky);
+}
+
+.album-home {
+  position: absolute;
+  left: max(16px, var(--safe-left));
+  bottom: max(14px, var(--safe-bottom));
+  width: 64px;
+  height: 64px;
+  padding: 14px;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 4px 0 var(--shadow);
+}
