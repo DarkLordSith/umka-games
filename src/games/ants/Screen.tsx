@@ -1,5 +1,6 @@
 // Экран муравьёв: DOM-раскладка (колонки, слоты, кнопки) + canvas-слой (картинка и муравьи).
-// Сверху вниз: фон под статус-баром → картинка → муравейник и 5 слотов → колонки → Undo.
+// Сверху вниз: фон под статус-баром → картинка → муравейник и 5 слотов →
+// стопки блоков до нижнего края экрана; справа от стопок — «заново» и Undo.
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { canUndo, createHistory, current, type History, push, restart, undo } from '../../engine/history';
 import { Confetti } from '../../ui/Confetti';
@@ -8,6 +9,7 @@ import { GAME_COLORS } from '../../ui/palette';
 import { makeLevel } from './generator';
 import { type AntsState, type Block, isStuck, isWon, SLOT_COUNT, tap } from './logic';
 import { AntsRenderer, type Layout } from './render';
+import { antHome, antLeft, placeBlock, type SlotsView, viewFromSlots } from './slotView';
 import './screen.css';
 
 export interface AntsScreenProps {
@@ -21,8 +23,10 @@ export interface AntsScreenProps {
 
 /** Полёт блока из колонки в слот, мс. Муравьи стартуют после него. */
 const FLIGHT_MS = 240;
-/** Сколько блоков под верхним видно приглушённо. */
-const PEEK = 3;
+/** Сколько блоков колонки рендерим: 4 видно, 5-й ждёт за нижним краем экрана. */
+const STACK_RENDERED = 5;
+/** Выезд колонки вверх, когда забрали верхний блок, мс. */
+const STACK_SLIDE_MS = 220;
 
 const colorVar = (color: number): string => `var(--game-${GAME_COLORS[color]?.id ?? 'red'})`;
 
@@ -41,17 +45,21 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
   const won = isWon(state);
   const [celebrating, setCelebrating] = useState(false);
 
+  /** Метка блока в каждом логическом слоте: номер установки. */
+  const slotTags = useRef<number[]>(Array.from({ length: SLOT_COUNT }, () => 0));
+  const placements = useRef(0);
+  /** Что показывают слоты (отстаёт от логики, пока бегут муравьи). */
+  const [slotsView, setSlotsView] = useState<SlotsView>(() => viewFromSlots(start.slots, slotTags.current));
+
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pictureRef = useRef<HTMLDivElement>(null);
   const holeRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef<(HTMLDivElement | null)[]>([]);
   const columnRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const stackRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const lengths = useRef<number[]>(start.columns.map(column => column.length));
   const rendererRef = useRef<AntsRenderer | null>(null);
-  const winTimer = useRef(0);
-  /** Ключ слота меняется, когда в него встаёт новый блок, — так перезапускается анимация появления. */
-  const slotKeys = useRef<number[]>(Array.from({ length: SLOT_COUNT }, () => 0));
-  const placements = useRef(0);
 
   // Раскладка: картинка — самый большой квадрат с целым размером клетки, остальное — из DOM.
   const measure = useCallback(() => {
@@ -86,7 +94,10 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
   }, []);
 
   useLayoutEffect(() => {
-    const renderer = new AntsRenderer(canvasRef.current!, historyRef.current.snapshots[0]!);
+    const renderer = new AntsRenderer(canvasRef.current!, historyRef.current.snapshots[0]!, {
+      onLeave: (slot, tag) => setSlotsView(view => antLeft(view, slot, tag)),
+      onHome: (slot, tag) => setSlotsView(view => antHome(view, slot, tag)),
+    });
     rendererRef.current = renderer;
     measure();
     const observer = new ResizeObserver(measure);
@@ -95,9 +106,26 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
       observer.disconnect();
       renderer.destroy();
       rendererRef.current = null;
-      window.clearTimeout(winTimer.current);
     };
   }, [measure]);
+
+  // Колонка стала короче — стопка выезжает вверх: следующий блок встаёт на место верхнего,
+  // снизу из-за края экрана появляется новый.
+  useLayoutEffect(() => {
+    state.columns.forEach((blocks, index) => {
+      const before = lengths.current[index] ?? blocks.length;
+      const stack = stackRefs.current[index];
+      const top = stack?.firstElementChild;
+      if (stack && top && blocks.length < before) {
+        const step = top.getBoundingClientRect().height + parseFloat(getComputedStyle(stack).rowGap || '0');
+        stack.animate([{ transform: `translateY(${step}px)` }, { transform: 'translateY(0)' }], {
+          duration: STACK_SLIDE_MS,
+          easing: 'cubic-bezier(0.3, 1.4, 0.5, 1)',
+        });
+      }
+    });
+    lengths.current = state.columns.map(column => column.length);
+  }, [state]);
 
   const shake = (column: number) => {
     columnRefs.current[column]?.querySelector('.ants-block')?.animate(
@@ -132,12 +160,11 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
     root.appendChild(ghost);
     const dx = a.x + a.w / 2 - (b.x + b.w / 2);
     const dy = a.y + a.h / 2 - (b.y + b.h / 2);
-    const scale = a.w / b.w;
     ghost
       .animate(
         [
-          { transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
-          { transform: `translate(${dx * 0.4}px, ${dy * 0.4 - 40}px) scale(${(scale + 1) / 2})`, offset: 0.55 },
+          { transform: `translate(${dx}px, ${dy}px) scale(${a.w / b.w}, ${a.h / b.h})` },
+          { transform: `translate(${dx * 0.4}px, ${dy * 0.4 - 40}px) scale(1.1)`, offset: 0.55 },
           { transform: 'translate(0, 0) scale(1)', opacity: 1 },
           { transform: 'translate(0, 0) scale(0.9)', opacity: 0 },
         ],
@@ -159,26 +186,33 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
       return;
     }
     const block = before.columns[column]![0]!;
-    slotKeys.current[result.slot] = ++placements.current;
+    const tag = ++placements.current;
+    slotTags.current[result.slot] = tag;
     fly(column, result.slot, block);
-    const duration = rendererRef.current?.play(result.state, result.events, FLIGHT_MS) ?? 0;
+    setSlotsView(view => placeBlock(view, result.slot, tag, block.color, block.ants));
+    // события слота принадлежат блоку, который в нём сейчас стоит
+    const events = result.events.map(event => ({ ...event, tag: slotTags.current[event.slot] ?? 0 }));
+    rendererRef.current?.play(result.state, events, FLIGHT_MS);
     const next = push(historyRef.current, result.state);
     historyRef.current = next;
     setHistory(next);
     if (isWon(result.state)) {
       onWin();
-      winTimer.current = window.setTimeout(() => {
+      rendererRef.current?.whenIdle(() => {
         rendererRef.current?.showWin(start.pixels);
         setCelebrating(true);
-      }, duration + 150);
+      });
     }
   };
 
   const jump = (next: History<AntsState>) => {
-    window.clearTimeout(winTimer.current);
     historyRef.current = next;
     setHistory(next);
-    rendererRef.current?.reset(current(next));
+    const state = current(next);
+    // у блоков в слотах — новые метки: хвост муравьёв прошлого больше ничего не меняет
+    slotTags.current = state.slots.map(slot => (slot ? ++placements.current : 0));
+    setSlotsView(viewFromSlots(state.slots, slotTags.current));
+    rendererRef.current?.reset(state);
   };
 
   // для скриншотов и ручной проверки в dev: window.__ants
@@ -199,69 +233,75 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
       <div className="ants-nest">
         <div className="ants-hole" ref={holeRef} />
         <div className="ants-slots">
-          {state.slots.map((slot, index) => (
+          {slotsView.map((slot, index) => (
             <div
-              key={slot ? `s${index}-${slotKeys.current[index]}` : `e${index}`}
+              key={slot ? `s${slot.tag}` : `e${index}`}
               ref={element => {
                 slotRefs.current[index] = element;
               }}
               className={slot ? 'ants-slot is-full' : 'ants-slot'}
               style={slot ? ({ '--block': colorVar(slot.color), '--delay': `${FLIGHT_MS}ms` } as CSSProperties) : undefined}
             >
-              {slot ? <span className="ants-count">{slot.left}</span> : null}
+              {slot && slot.left > 0 ? <span className="ants-count">{slot.left}</span> : null}
             </div>
           ))}
         </div>
       </div>
-      <div className="ants-columns">
-        {state.columns.map((blocks, index) => (
+      <div className="ants-bottom">
+        <div className="ants-columns">
+          {state.columns.map((blocks, index) => (
+            <button
+              key={index}
+              type="button"
+              className="ants-column"
+              ref={element => {
+                columnRefs.current[index] = element;
+              }}
+              aria-label={`колонка ${index + 1}`}
+              disabled={blocks.length === 0}
+              onPointerDown={() => onColumn(index)}
+            >
+              <div
+                className="ants-stack"
+                ref={element => {
+                  stackRefs.current[index] = element;
+                }}
+              >
+                {blocks.length === 0 ? <span className="ants-empty" /> : null}
+                {blocks.slice(0, STACK_RENDERED).map((block, depth) => (
+                  // ключ — место от дна колонки: при выезде вверх элементы те же, только сдвигаются
+                  <span
+                    key={blocks.length - depth}
+                    className={depth === 0 ? 'ants-block is-top' : 'ants-block'}
+                    style={{ background: colorVar(block.color) }}
+                  >
+                    <span className="ants-count">{block.ants}</span>
+                  </span>
+                ))}
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="ants-side">
           <button
-            key={index}
             type="button"
-            className="ants-column"
-            ref={element => {
-              columnRefs.current[index] = element;
-            }}
-            aria-label={`колонка ${index + 1}`}
-            disabled={blocks.length === 0}
-            onPointerDown={() => onColumn(index)}
+            className="ants-restart"
+            aria-label="заново"
+            disabled={won || !canUndo(history)}
+            onPointerDown={() => jump(restart(historyRef.current))}
           >
-            {blocks.slice(1, 1 + PEEK).map((block, depth) => (
-              <span
-                key={`p${depth}`}
-                className="ants-peek"
-                style={{ background: colorVar(block.color), '--depth': depth + 1 } as CSSProperties}
-              />
-            ))}
-            {blocks[0] ? (
-              <span className="ants-block" style={{ background: colorVar(blocks[0].color) }}>
-                <span className="ants-count">{blocks[0].ants}</span>
-              </span>
-            ) : (
-              <span className="ants-empty" />
-            )}
+            <RestartIcon />
           </button>
-        ))}
-      </div>
-      <div className="ants-bar">
-        <button
-          type="button"
-          className="ants-restart"
-          aria-label="заново"
-          disabled={won || !canUndo(history)}
-          onPointerDown={() => jump(restart(historyRef.current))}
-        >
-          <RestartIcon />
-        </button>
-        <button
-          type="button"
-          className={stuck ? 'ants-undo is-pulsing' : 'ants-undo'}
-          aria-label="назад"
-          disabled={won || !canUndo(history)}
-          onPointerDown={() => jump(undo(historyRef.current))}
-        >
-          <UndoIcon />
-        </button>
+          <button
+            type="button"
+            className={stuck ? 'ants-undo is-pulsing' : 'ants-undo'}
+            aria-label="назад"
+            disabled={won || !canUndo(history)}
+            onPointerDown={() => jump(undo(historyRef.current))}
+          >
+            <UndoIcon />
+          </button>
+        </div>
       </div>
       <canvas className="ants-canvas" ref={canvasRef} />
       {celebrating ? (

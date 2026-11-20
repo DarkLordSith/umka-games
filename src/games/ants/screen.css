@@ -1,15 +1,19 @@
 /* Экран муравьёв. Размеры подобраны под 375×667 (SE) и 390×844; всё в один экран. */
 
 .ants {
-  --slot: 52px;
-  /* колонка — четверть ширины без отступов, но не шире 80px; блок внутри на 8px меньше (≥ 60 pt на SE) */
-  --column: min(80px, calc((100vw - 32px - 30px) / 4));
-  --block: calc(var(--column) - 8px);
-  --peek: 9px;
+  --slot: 50px;
+  /* правая колонка с Undo и «заново» */
+  --side: 76px;
+  --gutter: 10px;
+  --gap: 6px;
+  /* колонка — четверть ширины без боковой панели и отступов, но не шире 72px (на SE ≈ 62px) */
+  --column: min(72px, calc((100vw - var(--gutter) * 2 - var(--side) - 8px - var(--gap) * 4) / 4));
+  /* блок пониже ширины: 4 штуки по высоте влезают на SE; вся колонка — цель касания */
+  --block-h: calc(var(--column) * 0.84);
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-rows: var(--top-zone) minmax(0, 1fr) auto auto auto;
+  grid-template-rows: var(--top-zone) minmax(0, 1fr) auto auto;
   /* без этого колонка grid растёт под ширину картинки и картинка раздувается по кругу */
   grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
@@ -34,7 +38,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 18px max(20px, var(--safe-right)) 10px max(20px, var(--safe-left));
+  padding: 14px max(20px, var(--safe-right)) 8px max(20px, var(--safe-left));
 }
 
 .ants-picture {
@@ -47,13 +51,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   padding: 0 16px;
 }
 
 .ants-hole {
   width: 56px;
-  height: 22px;
+  height: 20px;
 }
 
 .ants-slots {
@@ -64,7 +68,7 @@
 .ants-slot {
   width: var(--slot);
   height: var(--slot);
-  border-radius: 16px;
+  border-radius: 15px;
   background: var(--panel);
   box-shadow: inset 0 3px 0 var(--shadow);
   display: grid;
@@ -94,45 +98,68 @@
   }
 }
 
-/* --- колонки: верхний блок крупно, под ним 3 приглушённых --- */
+/* --- низ: стопки до нижнего края экрана + боковая панель --- */
+
+.ants-bottom {
+  display: flex;
+  gap: 8px;
+  /* видно ровно 4 блока; 5-й — уже за нижним краем экрана */
+  height: calc(var(--block-h) * 4 + var(--gap) * 3 + 12px + var(--safe-bottom));
+  padding: 12px max(var(--gutter), var(--safe-right)) 0 max(var(--gutter), var(--safe-left));
+}
 
 .ants-columns {
+  flex: 1;
   display: flex;
   justify-content: center;
-  gap: 10px;
-  padding: 14px 16px 6px;
+  gap: var(--gap);
 }
 
 .ants-column {
   position: relative;
-  /* зона касания — вся колонка, шире и выше блока */
   width: var(--column);
-  height: calc(var(--block) + var(--peek) * 3 + 8px);
+  /* зона касания — вся колонка до низа экрана */
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.ants-stack {
   display: flex;
-  justify-content: center;
-  padding-top: 4px;
+  flex-direction: column;
+  align-items: center;
+  row-gap: var(--gap);
 }
 
 .ants-block,
 .ants-empty {
   position: relative;
-  z-index: 4;
-  width: var(--block);
-  height: var(--block);
-  border-radius: 20px;
+  flex: none;
+  width: var(--column);
+  height: var(--block-h);
+  border-radius: 16px;
   display: grid;
   place-items: center;
 }
 
 .ants-block {
   box-shadow:
-    inset 0 -7px 0 var(--shadow),
-    inset 0 6px 0 -2px var(--white),
-    0 4px 0 var(--shadow);
+    inset 0 -6px 0 var(--shadow),
+    inset 0 5px 0 -2px var(--white),
+    0 3px 0 var(--shadow);
   transition: transform 0.1s ease-out;
 }
 
-.ants-column:active .ants-block {
+/* блоки под верхним — тот же цвет и число, чуть меньше */
+.ants-block:not(.is-top) {
+  transform: scale(0.92);
+}
+
+.ants-block:not(.is-top) .ants-count {
+  font-size: 24px;
+}
+
+.ants-column:active .ants-block.is-top {
   transform: scale(0.94);
 }
 
@@ -140,22 +167,9 @@
   border: 3px dashed var(--panel);
 }
 
-.ants-peek {
-  position: absolute;
-  left: 50%;
-  top: calc(4px + var(--block) - 14px + var(--peek) * var(--depth, 1));
-  width: calc(var(--block) - var(--depth, 1) * 8px);
-  height: 18px;
-  border-radius: 0 0 14px 14px;
-  transform: translateX(-50%);
-  opacity: calc(0.75 - var(--depth, 1) * 0.15);
-  z-index: calc(4 - var(--depth, 1));
-  box-shadow: inset 0 -4px 0 var(--shadow);
-}
-
 /* число муравьёв: крупные белые цифры с тёмной обводкой — читаются на любом цвете */
 .ants-count {
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 800;
   line-height: 1;
   color: var(--white);
@@ -169,22 +183,22 @@
 }
 
 .ants-slot .ants-count {
-  font-size: 24px;
+  font-size: 23px;
 }
 
-/* --- низ: Undo по центру, «заново» маленькая в левом углу --- */
-
-.ants-bar {
-  position: relative;
+.ants-side {
+  flex: none;
+  width: var(--side);
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  justify-content: space-between;
   align-items: center;
-  padding: 6px 16px max(12px, var(--safe-bottom));
+  padding-bottom: max(12px, var(--safe-bottom));
 }
 
 .ants-undo {
-  width: 76px;
-  height: 76px;
+  width: 74px;
+  height: 74px;
   border-radius: 50%;
   padding: 16px;
   background: var(--white);
@@ -202,14 +216,12 @@
 
 @keyframes undo-pulse {
   50% {
-    transform: scale(1.14);
+    transform: scale(1.12);
   }
 }
 
 .ants-restart {
-  position: absolute;
-  left: max(16px, var(--safe-left));
-  bottom: max(12px, var(--safe-bottom));
+  position: relative;
   width: 44px;
   height: 44px;
   padding: 9px;
@@ -239,7 +251,7 @@
 .ants-ghost {
   position: absolute;
   z-index: 3;
-  border-radius: 16px;
+  border-radius: 15px;
   pointer-events: none;
   box-shadow: inset 0 -5px 0 var(--shadow);
 }

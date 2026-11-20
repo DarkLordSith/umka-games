@@ -5,8 +5,20 @@
 //
 // Логика уже посчитана (logic.ts), рендер только «догоняет»: пиксель из события
 // хода остаётся видимым, пока до него не добежит муравей.
+//
+// Путь муравья — только по горизонтали и вертикали (paths.ts): из слота вверх
+// к муравейнику, к краю картинки, дальше по пустым клеткам и полю вокруг
+// картинки, не сквозь несъеденные пиксели. Путь считается в момент выхода
+// муравья (к пикселю) и в момент, когда он его взял (обратно).
 import { GAME_COLORS, SHADOW, UI_COLORS } from '../../ui/palette';
 import { type AntsState, EMPTY, type EatEvent } from './logic';
+import { type Cell, corners, gridPath } from './paths';
+
+// ---- скорость: подкручивать здесь ----
+/** Скорость муравья, CSS px в мс (было 0.75 — вдвое быстрее). */
+export const ANT_SPEED = 0.36;
+/** Интервал между выходами муравьёв одного хода, мс. */
+export const ANT_STAGGER = 150;
 
 export interface Rect {
   readonly x: number;
@@ -27,36 +39,64 @@ export interface Layout {
   readonly slots: readonly Point[];
 }
 
+/** Событие хода с меткой блока в слоте (см. slotView.ts). */
+export interface TaggedEvent extends EatEvent {
+  readonly tag: number;
+}
+
+export interface RendererCallbacks {
+  /** Муравей выбежал из слота. */
+  readonly onLeave?: (slot: number, tag: number) => void;
+  /** Муравей добежал до дырки. */
+  readonly onHome?: (slot: number, tag: number) => void;
+}
+
+type Phase = 'wait' | 'out' | 'back';
+
 interface Ant {
+  readonly slot: number;
+  readonly tag: number;
   /** Пиксель, который муравей съест. */
   readonly pixel: number;
   /** Цвет пикселя = цвет блока (муравей ест только свой цвет). */
-  readonly pixelColor: number;
-  readonly from: Point;
+  readonly color: number;
   readonly launch: number;
-  readonly arrive: number;
-  readonly done: number;
+  phase: Phase;
+  /** Ломаная текущей фазы и когда фаза началась. */
+  path: Point[];
+  length: number;
+  start: number;
 }
 
-/** Скорость муравья, CSS px в мс. */
-const ANT_SPEED = 0.75;
-/** Интервал между муравьями одного хода: не больше 70 мс и весь «хвост» не дольше ~600 мс. */
-const MAX_STAGGER = 70;
-const STAGGER_BUDGET = 600;
-
 // Пиксельный муравей 8×5, голова справа: x — тело цвета блока, a — тёмные усики, глаз и ножки.
-// Две раскладки ног чередуются — «шаг».
+// Две раскладки ног чередуются — «шаг». (Мультяшный муравей — задача 3б.)
 const ANT_BODY = ['......a.', '.xx...xa', 'xxxxxxxx', '.xx.x.xx'];
 const ANT_LEGS = ['a.a.a.a.', '.a.a.a.a'];
 
 const color = (index: number): string => GAME_COLORS[index]?.hex ?? UI_COLORS.ink;
 
-function lerp(a: Point, b: Point, t: number): Point {
-  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+function pathLength(path: readonly Point[]): number {
+  let total = 0;
+  for (let i = 1; i < path.length; i++) {
+    total += Math.abs(path[i]!.x - path[i - 1]!.x) + Math.abs(path[i]!.y - path[i - 1]!.y);
+  }
+  return total;
 }
 
-function distance(a: Point, b: Point): number {
-  return Math.hypot(b.x - a.x, b.y - a.y);
+/** Точка на ломаной на расстоянии distance от начала и направление участка. */
+function pointAt(path: readonly Point[], distance: number): { point: Point; dx: number; dy: number } {
+  let left = distance;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1]!;
+    const b = path[i]!;
+    const segment = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+    if (left <= segment || i === path.length - 1) {
+      const t = segment === 0 ? 1 : Math.min(1, left / segment);
+      return { point: { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, dx: b.x - a.x, dy: b.y - a.y };
+    }
+    left -= segment;
+  }
+  return { point: path[path.length - 1] ?? { x: 0, y: 0 }, dx: 1, dy: 0 };
 }
 
 export class AntsRenderer {
@@ -68,6 +108,7 @@ export class AntsRenderer {
   private ants: Ant[] = [];
   /** Победа: показываем исходную картинку и подпрыгиваем. */
   private win: { readonly pixels: readonly number[]; readonly start: number } | null = null;
+  private idle: (() => void) | null = null;
   private frame = 0;
   private width = 0;
   private height = 0;
@@ -75,6 +116,7 @@ export class AntsRenderer {
   constructor(
     private readonly canvas: HTMLCanvasElement,
     state: AntsState,
+    private readonly callbacks: RendererCallbacks = {},
   ) {
     const context = canvas.getContext('2d');
     if (!context) {
@@ -102,39 +144,43 @@ export class AntsRenderer {
     this.ants = [];
     this.pending.clear();
     this.win = null;
+    this.idle = null;
     this.request();
   }
 
   /**
-   * Новый ход: state — уже после хода, events — что съедено. Муравьи стартуют
-   * через delay мс (пока блок летит в слот). Возвращает, через сколько мс
-   * последний муравей вернётся в дырку.
+   * Новый ход: state — уже после хода, events — что съедено (с меткой блока).
+   * Муравьи выходят через delay мс (пока блок летит в слот) с интервалом ANT_STAGGER.
+   * Муравьи прошлых ходов продолжают бежать параллельно — как отряды из разных слотов.
    */
-  play(state: AntsState, events: readonly EatEvent[], delay: number): number {
+  play(state: AntsState, events: readonly TaggedEvent[], delay: number): void {
     const previous = this.state;
     this.state = state;
-    const layout = this.layout;
-    if (!layout || events.length === 0) {
-      this.request();
-      return delay;
-    }
-    const now = performance.now();
-    const stagger = Math.min(MAX_STAGGER, STAGGER_BUDGET / events.length);
-    let end = 0;
-    events.forEach((event, order) => {
+    let launch = performance.now() + delay;
+    for (const event of events) {
       const pixel = event.y * state.width + event.x;
       const pixelColor = this.pending.get(pixel) ?? previous.pixels[pixel] ?? EMPTY;
-      const from = layout.slots[event.slot] ?? layout.hole;
-      const target = this.pixelCenter(pixel);
-      const launch = now + delay + order * stagger;
-      const arrive = launch + distance(from, target) / ANT_SPEED;
-      const done = arrive + distance(target, layout.hole) / ANT_SPEED;
       this.pending.set(pixel, pixelColor);
-      this.ants.push({ pixel, pixelColor, from, launch, arrive, done });
-      end = Math.max(end, done - now);
-    });
+      this.ants.push({
+        slot: event.slot,
+        tag: event.tag,
+        pixel,
+        color: pixelColor,
+        launch,
+        phase: 'wait',
+        path: [],
+        length: 0,
+        start: launch,
+      });
+      launch += ANT_STAGGER;
+    }
     this.request();
-    return end;
+  }
+
+  /** Вызвать callback, когда все муравьи добегут (сразу в следующем кадре, если их нет). */
+  whenIdle(callback: () => void): void {
+    this.idle = callback;
+    this.request();
   }
 
   /** Победа: исходная картинка возвращается и подпрыгивает. */
@@ -161,12 +207,85 @@ export class AntsRenderer {
     return (this.layout?.picture.w ?? 0) / this.state.width;
   }
 
-  private pixelCenter(index: number): Point {
+  /** Центр клетки сетки (с полем: x от −1 до width). */
+  private cellCenter(cell: Cell): Point {
     const picture = this.layout!.picture;
     const size = this.cell();
-    const x = index % this.state.width;
-    const y = Math.floor(index / this.state.width);
-    return { x: picture.x + (x + 0.5) * size, y: picture.y + (y + 0.5) * size };
+    return { x: picture.x + (cell.x + 0.5) * size, y: picture.y + (cell.y + 0.5) * size };
+  }
+
+  /** Клетка поля под картинкой, через которую муравьи входят и выходят: ближе к цели. */
+  private gate(target: number): Cell {
+    const { width, height } = this.state;
+    const x = target % width < width / 2 ? Math.floor((width - 1) / 2) : Math.ceil((width - 1) / 2);
+    return { x, y: height };
+  }
+
+  /** Клетки от ворот до пикселя: сначала в обход видимых пикселей, не вышло — по логике. */
+  private cellsTo(target: number, reverse: boolean): Cell[] {
+    const { width, height, pixels } = this.state;
+    const goal = { x: target % width, y: Math.floor(target / width) };
+    const gate = this.gate(target);
+    const shown = (index: number) => pixels[index] !== EMPTY || (index !== target && this.pending.has(index));
+    const eaten = (index: number) => pixels[index] !== EMPTY;
+    const path = gridPath(width, height, shown, gate, goal) ?? gridPath(width, height, eaten, gate, goal) ?? [gate, goal];
+    return reverse ? path.reverse() : path;
+  }
+
+  /** Путь к пикселю: слот → вверх до муравейника → к нему → вверх к воротам → по сетке. */
+  private outboundPath(ant: Ant): Point[] {
+    const layout = this.layout!;
+    const slot = layout.slots[ant.slot] ?? layout.hole;
+    const cells = this.cellsTo(ant.pixel, false).map(cell => this.cellCenter(cell));
+    const gate = cells[0]!;
+    return corners([
+      slot,
+      { x: slot.x, y: layout.hole.y },
+      layout.hole,
+      { x: layout.hole.x, y: gate.y },
+      ...cells,
+    ]);
+  }
+
+  /** Путь обратно: от пикселя по сетке к воротам → вниз в муравейник. */
+  private homePath(ant: Ant): Point[] {
+    const layout = this.layout!;
+    const cells = this.cellsTo(ant.pixel, true).map(cell => this.cellCenter(cell));
+    const gate = cells[cells.length - 1]!;
+    return corners([...cells, { x: layout.hole.x, y: gate.y }, layout.hole]);
+  }
+
+  /** Переходы фаз: выход из слота, взял пиксель, вернулся в дырку. */
+  private advance(time: number): void {
+    const finished: Ant[] = [];
+    for (const ant of this.ants) {
+      for (;;) {
+        if (ant.phase === 'wait' && time >= ant.launch) {
+          ant.phase = 'out';
+          ant.path = this.outboundPath(ant);
+          ant.length = pathLength(ant.path);
+          ant.start = ant.launch;
+          this.callbacks.onLeave?.(ant.slot, ant.tag);
+        } else if (ant.phase === 'out' && time >= ant.start + ant.length / ANT_SPEED) {
+          this.pending.delete(ant.pixel);
+          ant.start += ant.length / ANT_SPEED;
+          ant.phase = 'back';
+          ant.path = this.homePath(ant);
+          ant.length = pathLength(ant.path);
+        } else if (ant.phase === 'back' && time >= ant.start + ant.length / ANT_SPEED) {
+          finished.push(ant);
+          break;
+        } else {
+          break;
+        }
+      }
+    }
+    if (finished.length > 0) {
+      this.ants = this.ants.filter(ant => !finished.includes(ant));
+      for (const ant of finished) {
+        this.callbacks.onHome?.(ant.slot, ant.tag);
+      }
+    }
   }
 
   private draw(time: number): void {
@@ -175,14 +294,7 @@ export class AntsRenderer {
     if (!this.layout) {
       return;
     }
-    // муравьи, добежавшие до пикселя, его «забирают»; вернувшиеся — исчезают
-    for (const ant of this.ants) {
-      if (time >= ant.arrive) {
-        this.pending.delete(ant.pixel);
-      }
-    }
-    this.ants = this.ants.filter(ant => time < ant.done);
-
+    this.advance(time);
     this.drawBoard();
     if (this.win) {
       this.drawWin(time - this.win.start, this.win.pixels);
@@ -192,6 +304,11 @@ export class AntsRenderer {
     this.drawHole();
     for (const ant of this.ants) {
       this.drawAnt(ant, time);
+    }
+    if (this.ants.length === 0 && this.idle) {
+      const idle = this.idle;
+      this.idle = null;
+      idle();
     }
     if (this.ants.length > 0 || this.win) {
       this.request();
@@ -255,7 +372,7 @@ export class AntsRenderer {
 
   private drawHole(): void {
     const { hole } = this.layout!;
-    const size = this.cell() * 1.6;
+    const size = Math.max(10, this.cell() * 1.6);
     const context = this.context;
     context.fillStyle = SHADOW;
     context.beginPath();
@@ -268,39 +385,40 @@ export class AntsRenderer {
   }
 
   private drawAnt(ant: Ant, time: number): void {
-    if (time < ant.launch) {
+    if (ant.phase === 'wait') {
       return;
     }
-    const layout = this.layout!;
-    const target = this.pixelCenter(ant.pixel);
-    const outbound = time < ant.arrive;
-    const position = outbound
-      ? lerp(ant.from, target, (time - ant.launch) / (ant.arrive - ant.launch))
-      : lerp(target, layout.hole, (time - ant.arrive) / (ant.done - ant.arrive));
-    const heading = outbound ? target.x - ant.from.x : layout.hole.x - target.x;
+    const { point, dx, dy } = pointAt(ant.path, (time - ant.start) * ANT_SPEED);
+    // спрайт смотрит вправо; поворачиваем по направлению участка
+    const angle = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? Math.PI : 0) : dy < 0 ? -Math.PI / 2 : Math.PI / 2;
     const unit = Math.max(1.5, this.cell() * 0.13);
-    const step = Math.floor(time / 90) % 2;
+    const step = Math.floor(time / 110) % 2;
     const context = this.context;
-    const left = position.x - 4 * unit;
-    const top = position.y - 2.5 * unit;
-    const flip = heading < 0;
+    context.save();
+    context.translate(point.x, point.y);
+    context.rotate(angle);
+    // влево — зеркалим, а не переворачиваем вверх ногами
+    if (angle === Math.PI) {
+      context.scale(1, -1);
+    }
     const plot = (row: string, y: number) => {
       for (let x = 0; x < row.length; x++) {
-        const mark = row[flip ? row.length - 1 - x : x];
+        const mark = row[x];
         if (mark === 'x' || mark === 'a') {
-          context.fillStyle = mark === 'x' ? color(ant.pixelColor) : UI_COLORS.ink;
-          context.fillRect(left + x * unit, top + y * unit, unit, unit);
+          context.fillStyle = mark === 'x' ? color(ant.color) : UI_COLORS.ink;
+          context.fillRect((x - 4) * unit, (y - 2.5) * unit, unit, unit);
         }
       }
     };
     ANT_BODY.forEach((row, y) => plot(row, y));
     plot(ANT_LEGS[step]!, ANT_BODY.length);
+    context.restore();
     // обратный путь — несёт пиксель над собой
-    if (!outbound) {
+    if (ant.phase === 'back') {
       const piece = this.cell() * 0.5;
-      context.fillStyle = color(ant.pixelColor);
+      context.fillStyle = color(ant.color);
       context.beginPath();
-      context.roundRect(position.x - piece / 2, top - piece * 0.9, piece, piece, piece * 0.25);
+      context.roundRect(point.x - piece / 2, point.y - 2.5 * unit - piece * 0.9, piece, piece, piece * 0.25);
       context.fill();
     }
   }
