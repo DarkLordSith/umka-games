@@ -16,10 +16,10 @@ import { AntAtlas, directionOf, WALK_CYCLE } from './antSprite';
 import { type Cell, corners, gridPath } from './paths';
 
 // ---- скорость: подкручивать здесь ----
-/** Скорость муравья, CSS px в мс (было 0.75 — вдвое быстрее). */
-export const ANT_SPEED = 0.36;
-/** Интервал между выходами муравьёв одного хода, мс. */
-export const ANT_STAGGER = 150;
+/** Скорость муравья, CSS px в мс (3: 0.75 → 3а: 0.36 → 3в: 0.22). */
+export const ANT_SPEED = 0.22;
+/** Интервал между выходами муравьёв одного хода, мс (3а: 150 → 3в: 220). */
+export const ANT_STAGGER = 220;
 
 export interface Rect {
   readonly x: number;
@@ -36,7 +36,10 @@ export interface Point {
 /** Где что лежит на экране — в CSS-пикселях относительно canvas. */
 export interface Layout {
   readonly picture: Rect;
+  /** Центр дырки-муравейника. */
   readonly hole: Point;
+  /** Место под дырку в раскладке: дырка рисуется внутри и не наезжает на слоты. */
+  readonly holeSize: { readonly w: number; readonly h: number };
   readonly slots: readonly Point[];
 }
 
@@ -72,8 +75,8 @@ interface Ant {
 /** Длина муравья в клетках картинки и минимум в CSS px (чтобы мордочку было видно на SE). */
 export const ANT_LENGTH_CELLS = 1.5;
 export const ANT_MIN_LENGTH = 20;
-/** Смена кадра ходьбы, мс. */
-export const ANT_STEP_MS = 110;
+/** Смена кадра ходьбы, мс: подогнано под скорость (≈ 35 px пути на кадр, как было в 3б), лапки не семенят. */
+export const ANT_STEP_MS = 160;
 
 const color = (index: number): string => GAME_COLORS[index]?.hex ?? UI_COLORS.ink;
 
@@ -379,16 +382,18 @@ export class AntsRenderer {
   }
 
   private drawHole(): void {
-    const { hole } = this.layout!;
-    const size = Math.max(10, this.cell() * 1.6);
+    const { hole, holeSize } = this.layout!;
+    // тень-бортик во всё место, тёмная дырка — внутри; ничего не выходит за место в раскладке
+    const rx = holeSize.w / 2;
+    const ry = holeSize.h / 2;
     const context = this.context;
     context.fillStyle = SHADOW;
     context.beginPath();
-    context.ellipse(hole.x, hole.y + size * 0.12, size * 1.25, size * 0.62, 0, 0, Math.PI * 2);
+    context.ellipse(hole.x, hole.y, rx, ry, 0, 0, Math.PI * 2);
     context.fill();
     context.fillStyle = UI_COLORS.ink;
     context.beginPath();
-    context.ellipse(hole.x, hole.y, size * 0.95, size * 0.45, 0, 0, Math.PI * 2);
+    context.ellipse(hole.x, hole.y - ry * 0.12, rx * 0.76, ry * 0.68, 0, 0, Math.PI * 2);
     context.fill();
   }
 

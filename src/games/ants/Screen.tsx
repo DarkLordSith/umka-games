@@ -23,8 +23,8 @@ export interface AntsScreenProps {
 
 /** Полёт блока из колонки в слот, мс. Муравьи стартуют после него. */
 const FLIGHT_MS = 240;
-/** Сколько блоков колонки рендерим: 4 видно, 5-й ждёт за нижним краем экрана. */
-const STACK_RENDERED = 5;
+/** Сколько блоков колонки рендерим: 3 видно, 4-й ждёт за верхом нижней полосы. */
+const STACK_RENDERED = 4;
 /** Выезд колонки вверх, когда забрали верхний блок, мс. */
 const STACK_SLIDE_MS = 220;
 
@@ -84,6 +84,7 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
     const layout: Layout = {
       picture: relativeRect(picture, root),
       hole: { x: holeRect.x + holeRect.w / 2, y: holeRect.y + holeRect.h / 2 },
+      holeSize: { w: holeRect.w, h: holeRect.h },
       slots: slotRefs.current.map(slot => {
         const rect = slot ? relativeRect(slot, root) : holeRect;
         return { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
@@ -278,8 +279,7 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
           ))}
         </div>
       </div>
-      <div className="ants-bottom">
-        <div className="ants-columns">
+      <div className="ants-columns">
           {state.columns.map((blocks, index) => (
             <div
               key={index}
@@ -328,26 +328,26 @@ export function AntsScreen({ level, onWin, onNext }: AntsScreenProps) {
             </div>
           ))}
         </div>
-        <div className="ants-side">
-          <button
-            type="button"
-            className="ants-restart"
-            aria-label="заново"
-            disabled={won || !canUndo(history)}
-            onPointerDown={() => jump(restart(historyRef.current))}
-          >
-            <RestartIcon />
-          </button>
-          <button
-            type="button"
-            className={stuck ? 'ants-undo is-pulsing' : 'ants-undo'}
-            aria-label="назад"
-            disabled={won || !canUndo(history)}
-            onPointerDown={() => jump(undo(historyRef.current))}
-          >
-            <UndoIcon />
-          </button>
-        </div>
+      {/* нижняя полоса: стопки уходят за её верх; «заново» — в левом углу, Undo — в правом */}
+      <div className="ants-bar">
+        <button
+          type="button"
+          className="ants-restart"
+          aria-label="заново"
+          disabled={won || !canUndo(history)}
+          onPointerDown={() => jump(restart(historyRef.current))}
+        >
+          <RestartIcon />
+        </button>
+        <button
+          type="button"
+          className={stuck ? 'ants-undo is-pulsing' : 'ants-undo'}
+          aria-label="назад"
+          disabled={won || !canUndo(history)}
+          onPointerDown={() => jump(undo(historyRef.current))}
+        >
+          <UndoIcon />
+        </button>
       </div>
       <canvas className="ants-canvas" ref={canvasRef} />
       {celebrating ? (
