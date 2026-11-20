@@ -6,6 +6,7 @@
 // Экран только анимирует: свой ход он узнаёт по pending (колонка, которую тапнули),
 // любое другое изменение state (Undo, «заново») — мгновенный сброс картинки.
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useAudio } from '../../audio/useAudio';
 import type { GameScreenProps } from '../../engine/types';
 import { HintHand } from '../../ui/HintHand';
 import { GAME_COLORS } from '../../ui/palette';
@@ -32,6 +33,7 @@ function relativeRect(element: Element, root: Element) {
 }
 
 export function AntsScreen({ state, start, won, hint, onMove, onWinShown }: AntsScreenProps) {
+  const { sfx, sayColor } = useAudio();
   const stateRef = useRef(state);
   stateRef.current = state;
   /** Состояние, которое сейчас показывает рендер (отличие от state = что-то произошло). */
@@ -94,7 +96,10 @@ export function AntsScreen({ state, start, won, hint, onMove, onWinShown }: Ants
   useLayoutEffect(() => {
     const renderer = new AntsRenderer(canvasRef.current!, shownRef.current, {
       onLeave: (slot, tag) => setSlotsView(view => antLeft(view, slot, tag)),
-      onHome: (slot, tag) => setSlotsView(view => antHome(view, slot, tag)),
+      onHome: (slot, tag) => {
+        setSlotsView(view => antHome(view, slot, tag));
+        sfx.eat();
+      },
     });
     rendererRef.current = renderer;
     measure();
@@ -219,10 +224,16 @@ export function AntsScreen({ state, start, won, hint, onMove, onWinShown }: Ants
     if (!result) {
       if ((before.columns[column]?.length ?? 0) > 0) {
         shake(column);
+        sfx.no();
       }
       return;
     }
-    fly(column, result.slot, before.columns[column]![0]!);
+    const block = before.columns[column]![0]!;
+    fly(column, result.slot, block);
+    // звук: «чпок» сейчас, «тук» — когда блок долетит до слота; название цвета — не чаще раза в 3 с
+    sfx.tap();
+    window.setTimeout(sfx.place, FLIGHT_MS);
+    sayColor(GAME_COLORS[block.color]!.id);
     pendingRef.current.push(column);
     predictedRef.current = result.state;
     onMove(column);

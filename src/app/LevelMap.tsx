@@ -5,6 +5,7 @@
 // формулой (номер точки → y), а в DOM только точки в окне прокрутки ± запас и кусок тропинки
 // между ними. Прокрутка нативная (плавная, с инерцией iOS), без своих жестов.
 import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useAudio } from '../audio/useAudio';
 import { gameProgress, levelsWon, type Progress } from '../engine/progress';
 import type { LevelSpec } from '../engine/types';
 import type { AnyGame } from '../games/registry';
@@ -78,6 +79,7 @@ export function LevelMap({ game, progress, jumpFrom, onOpen, onHome, onArrive }:
   const scrollerRef = useRef<HTMLDivElement>(null);
   const tokenRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ top: 0, width: 0, height: 0 });
+  const { sfx } = useAudio();
 
   const saved = gameProgress(progress, game.id, game.startDifficulty);
   const won = levelsWon(saved);
@@ -165,6 +167,8 @@ export function LevelMap({ game, progress, jumpFrom, onOpen, onHome, onArrive }:
       ],
       { duration: JUMP_MS, delay: JUMP_DELAY_MS, easing: 'ease-in-out', fill: 'backwards' },
     );
+    const hop = window.setTimeout(sfx.hop, JUMP_DELAY_MS);
+    animation.oncancel = () => window.clearTimeout(hop);
     animation.onfinish = () => onArrive?.();
   });
 
@@ -186,6 +190,7 @@ export function LevelMap({ game, progress, jumpFrom, onOpen, onHome, onArrive }:
   }, [first, last, total, view.width, geometry.content]);
 
   const open = (n: number) => {
+    sfx.tap();
     if (n <= won) {
       onOpen({ spec: saved.levels[n - 1]!, number: n, replay: true });
     } else if (n === current) {

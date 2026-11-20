@@ -1,4 +1,5 @@
-import { lazy, Suspense, useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { setAudioSettings } from '../audio/engine';
 import type { Progress } from '../engine/progress';
 import { findGame } from '../games/registry';
 import { GameHost, type LevelPlay } from './GameHost';
@@ -56,6 +57,8 @@ export function App() {
     setProgress(next);
   }, []);
   const toMenu = useCallback(() => setView({ kind: 'menu' }), []);
+  // выключатели звука и голоса из родительского экрана
+  useEffect(() => setAudioSettings(progress.settings), [progress.settings]);
 
   if (AntsPreview && devPage() === 'ants') {
     return (
