@@ -1,0 +1,254 @@
+/* Экран муравьёв. Размеры подобраны под 375×667 (SE) и 390×844; всё в один экран. */
+
+.ants {
+  --slot: 52px;
+  /* колонка — четверть ширины без отступов, но не шире 80px; блок внутри на 8px меньше (≥ 60 pt на SE) */
+  --column: min(80px, calc((100vw - 32px - 30px) / 4));
+  --block: calc(var(--column) - 8px);
+  --peek: 9px;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: var(--top-zone) minmax(0, 1fr) auto auto auto;
+  /* без этого колонка grid растёт под ширину картинки и картинка раздувается по кругу */
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.ants-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* --- картинка: квадрат, размер ставит Screen.tsx (целая клетка) --- */
+
+.ants-picture-area {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px max(20px, var(--safe-right)) 10px max(20px, var(--safe-left));
+}
+
+.ants-picture {
+  flex: none;
+}
+
+/* --- муравейник: дырка по центру под картинкой, ниже 5 слотов --- */
+
+.ants-nest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+}
+
+.ants-hole {
+  width: 56px;
+  height: 22px;
+}
+
+.ants-slots {
+  display: flex;
+  gap: 8px;
+}
+
+.ants-slot {
+  width: var(--slot);
+  height: var(--slot);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: inset 0 3px 0 var(--shadow);
+  display: grid;
+  place-items: center;
+}
+
+.ants-slot.is-full {
+  background: var(--block, var(--panel));
+  box-shadow:
+    inset 0 -5px 0 var(--shadow),
+    0 3px 0 var(--shadow);
+  /* проявляется, когда долетает копия блока */
+  animation: slot-pop 0.22s ease-out var(--delay, 0ms) backwards;
+}
+
+@keyframes slot-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.12, 0.9);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* --- колонки: верхний блок крупно, под ним 3 приглушённых --- */
+
+.ants-columns {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 16px 6px;
+}
+
+.ants-column {
+  position: relative;
+  /* зона касания — вся колонка, шире и выше блока */
+  width: var(--column);
+  height: calc(var(--block) + var(--peek) * 3 + 8px);
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.ants-block,
+.ants-empty {
+  position: relative;
+  z-index: 4;
+  width: var(--block);
+  height: var(--block);
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+}
+
+.ants-block {
+  box-shadow:
+    inset 0 -7px 0 var(--shadow),
+    inset 0 6px 0 -2px var(--white),
+    0 4px 0 var(--shadow);
+  transition: transform 0.1s ease-out;
+}
+
+.ants-column:active .ants-block {
+  transform: scale(0.94);
+}
+
+.ants-empty {
+  border: 3px dashed var(--panel);
+}
+
+.ants-peek {
+  position: absolute;
+  left: 50%;
+  top: calc(4px + var(--block) - 14px + var(--peek) * var(--depth, 1));
+  width: calc(var(--block) - var(--depth, 1) * 8px);
+  height: 18px;
+  border-radius: 0 0 14px 14px;
+  transform: translateX(-50%);
+  opacity: calc(0.75 - var(--depth, 1) * 0.15);
+  z-index: calc(4 - var(--depth, 1));
+  box-shadow: inset 0 -4px 0 var(--shadow);
+}
+
+/* число муравьёв: крупные белые цифры с тёмной обводкой — читаются на любом цвете */
+.ants-count {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--white);
+  text-shadow:
+    0 2px 0 var(--ink),
+    2px 0 0 var(--ink),
+    -2px 0 0 var(--ink),
+    0 -2px 0 var(--ink),
+    2px 2px 0 var(--ink),
+    -2px 2px 0 var(--ink);
+}
+
+.ants-slot .ants-count {
+  font-size: 24px;
+}
+
+/* --- низ: Undo по центру, «заново» маленькая в левом углу --- */
+
+.ants-bar {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 6px 16px max(12px, var(--safe-bottom));
+}
+
+.ants-undo {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  padding: 16px;
+  background: var(--white);
+  color: var(--sky);
+  box-shadow:
+    inset 0 -6px 0 var(--shadow),
+    0 4px 0 var(--shadow);
+}
+
+.ants-undo.is-pulsing {
+  animation: undo-pulse 0.9s ease-in-out infinite;
+  background: var(--game-yellow);
+  color: var(--ink);
+}
+
+@keyframes undo-pulse {
+  50% {
+    transform: scale(1.14);
+  }
+}
+
+.ants-restart {
+  position: absolute;
+  left: max(16px, var(--safe-left));
+  bottom: max(12px, var(--safe-bottom));
+  width: 44px;
+  height: 44px;
+  padding: 9px;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+/* зона касания больше видимой кнопки (60 pt) */
+.ants-restart::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+.ants-undo:disabled,
+.ants-restart:disabled {
+  opacity: 0.4;
+}
+
+.ants-column:disabled {
+  cursor: default;
+}
+
+/* --- полёт блока в слот --- */
+
+.ants-ghost {
+  position: absolute;
+  z-index: 3;
+  border-radius: 16px;
+  pointer-events: none;
+  box-shadow: inset 0 -5px 0 var(--shadow);
+}
+
+/* --- победа: конфетти поверх, тап в любом месте — дальше --- */
+
+.ants-win {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: transparent;
+}

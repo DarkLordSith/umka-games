@@ -123,9 +123,10 @@ describe('CSS-переменные', () => {
       [...readFileSync(join(ROOT, file), 'utf8').matchAll(/(--[\w-]+)\s*:/g)].map(match => match[1]),
     );
     const defined = new Set([...Object.keys(CSS_TOKENS), ...definedInCss]);
+    // var(--x, запасное) может задаваться в style из кода; var(--x) без запасного обязан быть определён.
     // var(--game-${id}) собирается в коде — проверяем отдельно через CSS_TOKENS
     const missing = SOURCES.flatMap(file =>
-      [...readFileSync(join(ROOT, file), 'utf8').matchAll(/var\((--[\w-]+)\s*[,)]/g)]
+      [...readFileSync(join(ROOT, file), 'utf8').matchAll(/var\((--[\w-]+)\s*\)/g)]
         .map(match => match[1]!)
         .filter(name => !defined.has(name))
         .map(name => `${file}: ${name}`),
