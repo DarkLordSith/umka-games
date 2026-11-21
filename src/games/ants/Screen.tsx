@@ -311,7 +311,7 @@ export function AntsScreen({ state, start, won, hint, onMove, onWinShown }: Ants
     <div className="ants" ref={rootRef}>
       <div className="sky" aria-hidden="true" />
       <div className="ants-picture-area">
-        <div className="ants-picture" ref={pictureRef} />
+        <div className="ants-picture" ref={pictureRef} data-sticker-source="" />
       </div>
       <div className="ants-nest">
         <div className="ants-hole" ref={holeRef} />

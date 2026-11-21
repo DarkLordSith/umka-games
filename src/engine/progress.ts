@@ -9,10 +9,12 @@
 //   v4 — та же форма; stickers дополнены наклейками за уже пройденные уровни
 //        (1 пройденный уровень = 1 наклейка, а альбома до v4 не было)
 //   v5 — settings.music (фоновая музыка), по умолчанию включена
+//   v6 — stickers удалено: наклейка = картинка пройденного уровня, коллекция выводится
+//        из levels (engine/collection.ts) — у старых игроков альбом соберётся сам
 
 import type { LevelSpec } from './types';
 
-export const PROGRESS_VERSION = 5;
+export const PROGRESS_VERSION = 6;
 
 /** Пройденный уровень: по нему игра строит тот же уровень для переигровки. */
 export type LevelRecord = LevelSpec;
@@ -43,13 +45,11 @@ export interface Progress {
   readonly v: typeof PROGRESS_VERSION;
   /** По id игры; нет записи — игра ещё не начата. */
   readonly games: Readonly<Record<string, GameProgress>>;
-  /** Номера полученных наклеек (rewards/stickers.ts) по порядку получения. */
-  readonly stickers: readonly number[];
   readonly settings: Settings;
 }
 
 export function defaultProgress(): Progress {
-  return { v: PROGRESS_VERSION, games: {}, stickers: [], settings: { sfx: true, voice: true, music: true } };
+  return { v: PROGRESS_VERSION, games: {}, settings: { sfx: true, voice: true, music: true } };
 }
 
 /** Прогресс игры или стартовый, если игра ещё не начата. */
@@ -66,16 +66,6 @@ export function withoutGame(progress: Progress, id: string): Progress {
   const games = { ...progress.games };
   delete games[id];
   return { ...progress, games };
-}
-
-/** Номер следующей наклейки: на 1 больше последней (номера не повторяются). */
-export function nextSticker(progress: Progress): number {
-  return progress.stickers.length === 0 ? 0 : Math.max(...progress.stickers) + 1;
-}
-
-/** Победа — новая наклейка в альбом. */
-export function withNewSticker(progress: Progress): Progress {
-  return { ...progress, stickers: [...progress.stickers, nextSticker(progress)] };
 }
 
 export function withSettings(progress: Progress, settings: Partial<Settings>): Progress {
@@ -163,6 +153,13 @@ function v4ToV5(raw: Record<string, unknown>): Record<string, unknown> {
   return { ...raw, v: 5, settings: { ...settings, music: true } };
 }
 
+/** v5 → v6: наклейки-номера больше не храним — альбом выводится из пройденных уровней. */
+function v5ToV6(raw: Record<string, unknown>): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...raw, v: 6 };
+  delete next.stickers;
+  return next;
+}
+
 function sanitizeLevel(raw: unknown): LevelRecord | null {
   if (!isObject(raw) || !isInt(raw.seed)) {
     return null;
@@ -203,12 +200,10 @@ function sanitize(raw: Record<string, unknown>): Progress {
       }
     }
   }
-  const stickers = Array.isArray(raw.stickers) ? raw.stickers.filter((item): item is number => isInt(item) && item >= 0) : [];
   const settings = isObject(raw.settings) ? raw.settings : {};
   return {
     v: PROGRESS_VERSION,
     games,
-    stickers: [...new Set(stickers)],
     settings: {
       sfx: typeof settings.sfx === 'boolean' ? settings.sfx : true,
       voice: typeof settings.voice === 'boolean' ? settings.voice : true,
@@ -223,6 +218,7 @@ const STEPS: Readonly<Record<number, (raw: Record<string, unknown>) => Record<st
   2: v2ToV3,
   3: v3ToV4,
   4: v4ToV5,
+  5: v5ToV6,
 };
 
 /**

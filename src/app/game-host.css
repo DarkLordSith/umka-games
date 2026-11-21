@@ -122,3 +122,13 @@
     transform: scale(1.08);
   }
 }
+
+/* Альбом в углу экрана победы: туда улетает наклейка. Не кнопка — только цель полёта. */
+.win-album {
+  position: absolute;
+  right: max(14px, var(--safe-right));
+  bottom: max(6px, var(--safe-bottom));
+  width: 84px;
+  height: 84px;
+  animation: next-in 0.35s ease-out both;
+}

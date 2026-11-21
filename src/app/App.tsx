@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { setAudioSettings } from '../audio/engine';
 import type { Progress } from '../engine/progress';
-import { findGame } from '../games/registry';
+import { findGame, GAMES } from '../games/registry';
 import { GameHost, type LevelPlay } from './GameHost';
 import { Album } from '../rewards/Album';
 import { LevelMap } from './LevelMap';
@@ -9,12 +9,9 @@ import { Menu } from './Menu';
 import { ParentScreen } from './ParentScreen';
 import { loadProgress, saveProgress } from './storage';
 
-/** Превью для отбраковки (только dev): ?dev=ants — муравьи, ?dev=pictures — картинки, ?dev=stickers — наклейки. В production-сборку не попадают. */
+/** Превью для отбраковки (только dev): ?dev=ants — муравьи, ?dev=pictures — картинки. В production-сборку не попадают. */
 const AntsPreview = import.meta.env.DEV
   ? lazy(() => import('../games/ants/AntsPreview').then(module => ({ default: module.AntsPreview })))
-  : null;
-const StickersPreview = import.meta.env.DEV
-  ? lazy(() => import('../rewards/StickersPreview').then(module => ({ default: module.StickersPreview })))
   : null;
 const PicturesPreview = import.meta.env.DEV
   ? lazy(() => import('../games/ants/PicturesPreview').then(module => ({ default: module.PicturesPreview })))
@@ -35,7 +32,7 @@ function devLevel(): number | null {
 
 type View =
   | { readonly kind: 'menu' }
-  | { readonly kind: 'map'; readonly id: string; readonly jumpFrom: number | null; readonly reward: number | null }
+  | { readonly kind: 'map'; readonly id: string; readonly jumpFrom: number | null }
   | { readonly kind: 'album'; readonly back: View }
   | { readonly kind: 'game'; readonly id: string; readonly play: LevelPlay }
   | { readonly kind: 'parent' };
@@ -73,14 +70,6 @@ export function App() {
     );
   }
 
-  if (StickersPreview && devPage() === 'stickers') {
-    return (
-      <Suspense fallback={null}>
-        <StickersPreview />
-      </Suspense>
-    );
-  }
-
   if (PicturesPreview && devPage() === 'pictures') {
     return (
       <Suspense fallback={null}>
@@ -90,7 +79,7 @@ export function App() {
   }
 
   if (view.kind === 'album') {
-    return <Album progress={progress} onBack={() => setView(view.back)} />;
+    return <Album games={GAMES} progress={progress} onBack={() => setView(view.back)} />;
   }
 
   if (view.kind === 'parent') {
@@ -100,14 +89,8 @@ export function App() {
   const game = view.kind === 'game' || view.kind === 'map' ? findGame(view.id) : undefined;
   if (game && view.kind === 'game') {
     const { play } = view;
-    // после новой победы фишка прыгает и прилетает наклейка (последняя полученная)
-    const toMap = (jumped: boolean) =>
-      setView({
-        kind: 'map',
-        id: game.id,
-        jumpFrom: jumped ? play.number : null,
-        reward: jumped && progress.stickers.length > 0 ? Math.max(...progress.stickers) : null,
-      });
+    // после новой победы фишка прыгает (наклейка уже улетела в альбом на экране победы)
+    const toMap = (jumped: boolean) => setView({ kind: 'map', id: game.id, jumpFrom: jumped ? play.number : null });
     return (
       <GameHost
         key={`${game.id}:${play.number}:${play.replay}`}
@@ -128,8 +111,7 @@ export function App() {
         game={game}
         progress={progress}
         jumpFrom={view.jumpFrom}
-        reward={view.reward}
-        onAlbum={() => setView({ kind: 'album', back: { kind: 'map', id: game.id, jumpFrom: null, reward: null } })}
+        onAlbum={() => setView({ kind: 'album', back: { kind: 'map', id: game.id, jumpFrom: null } })}
         onOpen={play => setView({ kind: 'game', id: game.id, play })}
         onHome={toMenu}
       />
@@ -138,7 +120,7 @@ export function App() {
 
   return (
     <Menu
-      onPlay={id => setView({ kind: 'map', id, jumpFrom: null, reward: null })}
+      onPlay={id => setView({ kind: 'map', id, jumpFrom: null })}
       onAlbum={() => setView({ kind: 'album', back: { kind: 'menu' } })}
       onParent={() => setView({ kind: 'parent' })}
     />

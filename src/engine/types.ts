@@ -1,6 +1,7 @@
 // Контракт игры: всё, что оболочка знает об игре. Игры подключаются одинаково —
 // модуль в src/games/<id>/index.ts и строка в src/games/registry.ts.
 import type { ComponentType } from 'react';
+import type { CollectionRules } from './collection';
 
 /**
  * Что экран игры получает от оболочки. Сессию, Undo, «заново», выход и награду ведёт
@@ -54,6 +55,8 @@ export interface GameModule<State, Move> {
   nextVariant?(difficulty: number, seed: number, played: readonly (string | null)[]): string | null;
   /** Маленькая картинка уровня для карты. Нет — кружок без превью. */
   readonly Thumbnail?: ComponentType<{ readonly level: LevelSpec }>;
+  /** Наклейки для альбома. Нет — игра в альбоме не показывается. */
+  readonly album?: GameAlbum;
   /** null — ход невозможен; state не мутирует. */
   applyMove(state: State, move: Move): State | null;
   isWon(state: State): boolean;
@@ -62,6 +65,16 @@ export interface GameModule<State, Move> {
   /** Следующий ход решателя или null. */
   hint(state: State): Move | null;
   readonly Screen: ComponentType<GameScreenProps<State, Move>>;
+}
+
+/**
+ * Альбом игры: места по всем вариантам (variants), вариант пройденного уровня (variantOf)
+ * и картинка наклейки. Белую обводку, тень и блеск рисует оболочка (rewards/) — Art рисует
+ * только саму картинку на прозрачном фоне, вписанную в контейнер.
+ */
+export interface GameAlbum extends CollectionRules {
+  /** silhouette — несобранная: форма картинки одним серым цветом (--silhouette). */
+  readonly Art: ComponentType<{ readonly variant: string; readonly silhouette?: boolean }>;
 }
 
 /** Правила без экрана — то, что нужно сессии (и тестам без React). */

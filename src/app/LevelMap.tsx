@@ -9,7 +9,6 @@ import { useAudio } from '../audio/useAudio';
 import { gameProgress, levelsWon, type Progress } from '../engine/progress';
 import type { LevelSpec } from '../engine/types';
 import type { AnyGame } from '../games/registry';
-import { StickerFlight } from '../rewards/StickerFlight';
 import { AlbumIcon, HomeIcon, SmallLockIcon } from '../ui/icons';
 import type { LevelPlay } from './GameHost';
 import './level-map.css';
@@ -40,8 +39,6 @@ export interface LevelMapProps {
   readonly jumpFrom: number | null;
   readonly onOpen: (play: LevelPlay) => void;
   readonly onHome: () => void;
-  /** Наклейка за только что пройденный уровень: прилетит в альбом, когда фишка допрыгает. */
-  readonly reward: number | null;
   readonly onAlbum: () => void;
 }
 
@@ -77,14 +74,11 @@ function trailPath(points: readonly { x: number; y: number }[]): string {
   return d;
 }
 
-export function LevelMap({ game, progress, jumpFrom, reward, onOpen, onHome, onAlbum }: LevelMapProps) {
+export function LevelMap({ game, progress, jumpFrom, onOpen, onHome, onAlbum }: LevelMapProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const tokenRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ top: 0, width: 0, height: 0 });
   const { sfx } = useAudio();
-  const albumRef = useRef<HTMLButtonElement>(null);
-  /** Наклейка в полёте (после прыжка фишки). */
-  const [flying, setFlying] = useState<number | null>(null);
 
   const saved = gameProgress(progress, game.id, game.startDifficulty);
   const won = levelsWon(saved);
@@ -174,7 +168,6 @@ export function LevelMap({ game, progress, jumpFrom, reward, onOpen, onHome, onA
     );
     const hop = window.setTimeout(sfx.hop, JUMP_DELAY_MS);
     animation.oncancel = () => window.clearTimeout(hop);
-    animation.onfinish = () => setFlying(reward);
   });
 
   // видимые точки: из y окна прокрутки
@@ -271,10 +264,9 @@ export function LevelMap({ game, progress, jumpFrom, reward, onOpen, onHome, onA
       <button type="button" className="map-home" aria-label="в меню" onClick={onHome}>
         <HomeIcon />
       </button>
-      <button ref={albumRef} type="button" className="map-album" aria-label="альбом" onClick={onAlbum}>
+      <button type="button" className="map-album" aria-label="альбом" onClick={onAlbum}>
         <AlbumIcon />
       </button>
-      {flying !== null ? <StickerFlight id={flying} target={albumRef} onDone={() => setFlying(null)} /> : null}
     </div>
   );
 }
