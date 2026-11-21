@@ -1,7 +1,7 @@
 // Голос: файлы public/voice/<id>.m4a (сейчас — заглушка Milena, потом записи владельца;
 // подмена файла не требует правок кода). Нет файла или не загрузился — тишина.
-// Одновременно звучит одна фраза; пока она звучит, эффекты тише.
-import { audioContext, duckSfx, onAudioReady, voiceOutput } from './engine';
+// Одновременно звучит одна фраза; пока она звучит, эффекты и музыка тише.
+import { audioContext, duckForVoice, onAudioReady, voiceOutput } from './engine';
 import { PHRASES, phrasesOf } from './phrases';
 
 const buffers = new Map<string, Promise<AudioBuffer | null>>();
@@ -47,7 +47,7 @@ export function say(id: string): void {
     source.connect(output);
     source.start();
     current = source;
-    duckSfx(buffer.duration);
+    duckForVoice(buffer.duration);
   });
 }
 

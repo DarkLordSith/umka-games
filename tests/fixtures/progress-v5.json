@@ -1,0 +1,16 @@
+{
+  "v": 5,
+  "games": {
+    "ants": {
+      "difficulty": 9,
+      "streak": 1,
+      "seed": 3,
+      "levels": [
+        { "difficulty": 8, "seed": 1, "variant": "cake" },
+        { "difficulty": 9, "seed": 2, "variant": "frog" }
+      ]
+    }
+  },
+  "stickers": [0, 1],
+  "settings": { "sfx": true, "voice": false, "music": false }
+}

@@ -8,10 +8,11 @@
 //        won больше не хранится: пройдено = levels.length (одно место правды)
 //   v4 — та же форма; stickers дополнены наклейками за уже пройденные уровни
 //        (1 пройденный уровень = 1 наклейка, а альбома до v4 не было)
+//   v5 — settings.music (фоновая музыка), по умолчанию включена
 
 import type { LevelSpec } from './types';
 
-export const PROGRESS_VERSION = 4;
+export const PROGRESS_VERSION = 5;
 
 /** Пройденный уровень: по нему игра строит тот же уровень для переигровки. */
 export type LevelRecord = LevelSpec;
@@ -35,6 +36,7 @@ export function levelsWon(game: GameProgress): number {
 export interface Settings {
   readonly sfx: boolean;
   readonly voice: boolean;
+  readonly music: boolean;
 }
 
 export interface Progress {
@@ -47,7 +49,7 @@ export interface Progress {
 }
 
 export function defaultProgress(): Progress {
-  return { v: PROGRESS_VERSION, games: {}, stickers: [], settings: { sfx: true, voice: true } };
+  return { v: PROGRESS_VERSION, games: {}, stickers: [], settings: { sfx: true, voice: true, music: true } };
 }
 
 /** Прогресс игры или стартовый, если игра ещё не начата. */
@@ -155,6 +157,12 @@ function v3ToV4(raw: Record<string, unknown>): Record<string, unknown> {
   return { ...raw, v: 4, stickers: [...had, ...backfill] };
 }
 
+/** v4 → v5: появилась фоновая музыка — включена. */
+function v4ToV5(raw: Record<string, unknown>): Record<string, unknown> {
+  const settings = isObject(raw.settings) ? raw.settings : {};
+  return { ...raw, v: 5, settings: { ...settings, music: true } };
+}
+
 function sanitizeLevel(raw: unknown): LevelRecord | null {
   if (!isObject(raw) || !isInt(raw.seed)) {
     return null;
@@ -204,6 +212,7 @@ function sanitize(raw: Record<string, unknown>): Progress {
     settings: {
       sfx: typeof settings.sfx === 'boolean' ? settings.sfx : true,
       voice: typeof settings.voice === 'boolean' ? settings.voice : true,
+      music: typeof settings.music === 'boolean' ? settings.music : true,
     },
   };
 }
@@ -213,6 +222,7 @@ const STEPS: Readonly<Record<number, (raw: Record<string, unknown>) => Record<st
   1: v1ToV2,
   2: v2ToV3,
   3: v3ToV4,
+  4: v4ToV5,
 };
 
 /**
