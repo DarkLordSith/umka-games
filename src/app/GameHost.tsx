@@ -3,12 +3,14 @@
 //
 // Кнопки — внизу, в зоне --chrome-bottom, которую экран игры оставляет пустой:
 // домик (на карту долгим нажатием 1 с) и «заново» — слева, Undo — справа.
-// Победа: конфетти, потом крупная «Дальше» (▶) — на карту.
+// Победа: конфетти, картинка уровня «отклеивается» наклейкой и летит в альбом в углу,
+// только потом крупная «Дальше» (▶) — на карту.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAudio } from '../audio/useAudio';
 import type { LevelSpec } from '../engine/types';
 import { nextDifficulty } from '../engine/difficulty';
-import { gameProgress, type Progress, withGame, withNewSticker } from '../engine/progress';
+import { type StickerReward, stickerReward } from '../engine/collection';
+import { gameProgress, type Progress, withGame } from '../engine/progress';
 import {
   levelResult,
   type Session,
@@ -24,7 +26,8 @@ import {
 } from '../engine/session';
 import type { AnyGame } from '../games/registry';
 import { Confetti } from '../ui/Confetti';
-import { HomeIcon, NextIcon, RestartIcon, UndoIcon } from '../ui/icons';
+import { WinSticker } from '../rewards/WinSticker';
+import { AlbumIcon, HomeIcon, NextIcon, RestartIcon, UndoIcon } from '../ui/icons';
 import { LongPress } from '../ui/LongPress';
 import './game-host.css';
 
@@ -72,6 +75,12 @@ export function GameHost({ game, play, progress, onProgress, onExit, onDone }: G
   const progressRef = useRef(progress);
   progressRef.current = progress;
   const [celebrating, setCelebrating] = useState(false);
+  /** Наклейка за этот уровень (считается в момент победы, до сохранения). null — у игры альбома нет. */
+  const rewardRef = useRef<StickerReward | null>(null);
+  /** Наклейка долетела до альбома — можно показать «Дальше». */
+  const [rewarded, setRewarded] = useState(false);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const albumRef = useRef<HTMLDivElement>(null);
   const [hint, setHint] = useState<unknown>(null);
 
   const update = (next: Session<unknown>) => {
@@ -115,24 +124,24 @@ export function GameHost({ game, play, progress, onProgress, onExit, onDone }: G
 
   /**
    * Уровень пройден: сразу, ещё до награды, сохраняются запись уровня (для карты
-   * и переигровки), новая сложность, следующий seed и наклейка. Переигровка прогресс не трогает.
+   * и переигровки), новая сложность и следующий seed. Наклейка из прогресса выводится сама
+   * (engine/collection). Переигровка прогресс не трогает.
    */
   const finish = (finished: Session<unknown>) => {
+    const before = gameProgress(progressRef.current, game.id, game.startDifficulty).levels;
+    rewardRef.current = game.album ? stickerReward(game.album, before, play.spec) : null;
     if (play.replay) {
       return;
     }
     const result = levelResult(finished);
     const saved = gameProgress(progressRef.current, game.id, game.startDifficulty);
     const adapted = nextDifficulty({ difficulty: play.spec.difficulty, streak: saved.streak }, result.clean, game.minDifficulty);
-    // 1 пройденный уровень = 1 наклейка; прилетит в альбом на карте
     onProgress(
-      withNewSticker(
-        withGame(progressRef.current, game.id, {
-          ...adapted,
-          seed: play.spec.seed + 1,
-          levels: [...saved.levels, play.spec],
-        }),
-      ),
+      withGame(progressRef.current, game.id, {
+        ...adapted,
+        seed: play.spec.seed + 1,
+        levels: [...saved.levels, play.spec],
+      }),
     );
   };
 
@@ -148,18 +157,23 @@ export function GameHost({ game, play, progress, onProgress, onExit, onDone }: G
     return true;
   };
 
-  // победа: арпеджио и похвала — вместе с конфетти
+  // победа: арпеджио и конфетти; голос — у наклейки («Новая наклейка!» или похвала на повторе).
+  // Нет наклейки у игры — сразу похвала и «Дальше».
   const onWinShown = useCallback(() => {
     setCelebrating(true);
     audio.sfx.win();
-    audio.sayFrom('praise');
+    if (!rewardRef.current) {
+      audio.sayFrom('praise');
+      setRewarded(true);
+    }
   }, [audio]);
+  const reward = rewardRef.current;
   const canUndo = sessionCanUndo(session) && !won;
   const canRestart = sessionCanRestart(session) && !won;
   const Screen = game.Screen;
 
   return (
-    <div className="game-host">
+    <div ref={hostRef} className="game-host">
       <Screen state={state} start={sessionStart(session)} won={won} hint={hint} onMove={onMove} onWinShown={onWinShown} />
       <div className="game-chrome">
         <LongPress className="chrome-home" duration={EXIT_HOLD_MS} onComplete={onExit} label="на карту">
@@ -188,9 +202,19 @@ export function GameHost({ game, play, progress, onProgress, onExit, onDone }: G
         // тап мимо «Дальше» ничего не делает: ребёнок любуется картинкой
         <div className="win-overlay">
           <Confetti seed={play.spec.seed} />
-          <button type="button" className="win-next" aria-label="дальше" onClick={onDone}>
-            <NextIcon />
-          </button>
+          {reward && game.album ? (
+            <>
+              <div ref={albumRef} className="win-album" aria-hidden="true">
+                <AlbumIcon />
+              </div>
+              <WinSticker album={game.album} reward={reward} stage={hostRef} target={albumRef} onDone={() => setRewarded(true)} />
+            </>
+          ) : null}
+          {rewarded ? (
+            <button type="button" className="win-next" aria-label="дальше" onClick={onDone}>
+              <NextIcon />
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -1,50 +1,66 @@
-// Альбом наклеек: страницы по 12 мест листаются свайпом (нативная прокрутка со «щелчком»
-// по страницам). Полученные наклейки — яркие, следующие места — блёклые силуэты того,
-// что там появится. Тап по наклейке — прыжок со звуком. Без текста: внизу точки страниц.
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+// Альбом наклеек — коллекция без повторов: по месту на каждый вариант каждой игры
+// (у муравьёв — каждая картинка). Собранные — наклейка с белой обводкой, собранная 2+ раза —
+// с золотистым блеском рамки; несобранные — серый силуэт («найди все»). Коллекция
+// выводится из пройденных уровней (engine/collection), отдельно не хранится.
+// Страницы по 20 мест (4 × 5) идут по играм подряд и листаются свайпом. Без текста и цифр.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAudio } from '../audio/useAudio';
-import { nextSticker } from '../engine/progress';
-import type { Progress } from '../engine/progress';
+import { collectionCounts } from '../engine/collection';
+import { gameProgress, type Progress } from '../engine/progress';
+import type { GameAlbum, GameModule } from '../engine/types';
 import { HomeIcon } from '../ui/icons';
-import { Sticker } from './Sticker';
+import { StickerArt } from './StickerArt';
 import './album.css';
-import './sticker.css';
 
-/** Мест на странице: 3 × 4. */
-export const PER_PAGE = 12;
+/** Мест на странице: 4 × 5. */
+export const PER_PAGE = 20;
+
+interface AlbumPage {
+  readonly gameId: string;
+  readonly album: GameAlbum;
+  readonly slots: readonly { readonly variant: string; readonly count: number }[];
+}
+
+/** Страницы альбома: игры с album по порядку, у каждой — свои страницы по PER_PAGE мест. */
+export function albumPages(games: readonly Pick<GameModule<unknown, unknown>, 'id' | 'album' | 'startDifficulty'>[], progress: Progress): AlbumPage[] {
+  return games.flatMap(game => {
+    const album = game.album;
+    if (!album) {
+      return [];
+    }
+    const counts = collectionCounts(album, gameProgress(progress, game.id, game.startDifficulty).levels);
+    const slots = album.variants.map(variant => ({ variant, count: counts.get(variant) ?? 0 }));
+    return Array.from({ length: Math.ceil(slots.length / PER_PAGE) }, (_, page) => ({
+      gameId: game.id,
+      album,
+      slots: slots.slice(page * PER_PAGE, (page + 1) * PER_PAGE),
+    }));
+  });
+}
 
 export interface AlbumProps {
+  readonly games: readonly GameModule<any, any>[];
   readonly progress: Progress;
   readonly onBack: () => void;
 }
 
-export function Album({ progress, onBack }: AlbumProps) {
+export function Album({ games, progress, onBack }: AlbumProps) {
   const { sfx, say } = useAudio();
   const pagesRef = useRef<HTMLDivElement>(null);
-  const { stickers } = progress;
-  // страниц — чтобы поместились все наклейки и хотя бы одно пустое место впереди
-  const pageCount = Math.max(1, Math.ceil((stickers.length + 1) / PER_PAGE));
-  const lastPage = Math.max(0, Math.ceil(stickers.length / PER_PAGE) - 1);
-  const [page, setPage] = useState(lastPage);
-  const upcoming = nextSticker(progress);
-
-  // открываем на странице с последней наклейкой
-  useLayoutEffect(() => {
-    const pages = pagesRef.current!;
-    pages.scrollLeft = lastPage * pages.clientWidth;
-  }, []);
+  const pages = useMemo(() => albumPages(games, progress), [games, progress]);
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
-    if (stickers.length > 0) {
+    if (pages.some(item => item.slots.some(slot => slot.count > 0))) {
       say('album-open');
     }
   }, []);
 
   useEffect(() => {
-    const pages = pagesRef.current!;
-    const onScroll = () => setPage(Math.round(pages.scrollLeft / Math.max(1, pages.clientWidth)));
-    pages.addEventListener('scroll', onScroll, { passive: true });
-    return () => pages.removeEventListener('scroll', onScroll);
+    const element = pagesRef.current!;
+    const onScroll = () => setPage(Math.round(element.scrollLeft / Math.max(1, element.clientWidth)));
+    element.addEventListener('scroll', onScroll, { passive: true });
+    return () => element.removeEventListener('scroll', onScroll);
   }, []);
 
   const jump = (element: HTMLElement) => {
@@ -52,7 +68,7 @@ export function Album({ progress, onBack }: AlbumProps) {
     element.animate(
       [
         { transform: 'translateY(0) scale(1)' },
-        { transform: 'translateY(-22px) scale(1.12) rotate(-6deg)', offset: 0.4 },
+        { transform: 'translateY(-18px) scale(1.14) rotate(-6deg)', offset: 0.4 },
         { transform: 'translateY(0) scale(0.94, 1.06)', offset: 0.75 },
         { transform: 'translateY(0) scale(1)' },
       ],
@@ -64,33 +80,31 @@ export function Album({ progress, onBack }: AlbumProps) {
     <div className="album">
       <div className="sky" aria-hidden="true" />
       <div ref={pagesRef} className="album-pages">
-        {Array.from({ length: pageCount }, (_, pageIndex) => (
+        {pages.map((item, pageIndex) => (
           <div key={pageIndex} className="album-page">
-            {Array.from({ length: PER_PAGE }, (_, slot) => {
-              const index = pageIndex * PER_PAGE + slot;
-              const owned = index < stickers.length;
-              const id = owned ? stickers[index]! : upcoming + (index - stickers.length);
-              return owned ? (
+            {item.slots.map(({ variant, count }) =>
+              count > 0 ? (
                 <button
-                  key={slot}
+                  key={variant}
                   type="button"
-                  className="album-slot is-owned"
-                  aria-label={String(index + 1)}
+                  className={count > 1 ? 'album-slot is-owned is-shiny' : 'album-slot is-owned'}
+                  aria-label={variant}
                   onClick={event => jump(event.currentTarget)}
                 >
-                  <Sticker id={id} />
+                  <StickerArt album={item.album} variant={variant} />
+                  {count > 1 ? <span className="sticker-shine" aria-hidden="true" /> : null}
                 </button>
               ) : (
-                <div key={slot} className="album-slot" aria-hidden="true">
-                  <Sticker id={id} silhouette />
+                <div key={variant} className="album-slot" aria-hidden="true">
+                  <StickerArt album={item.album} variant={variant} silhouette />
                 </div>
-              );
-            })}
+              ),
+            )}
           </div>
         ))}
       </div>
       <div className="album-dots" aria-hidden="true">
-        {Array.from({ length: pageCount }, (_, index) => (
+        {pages.map((_, index) => (
           <span key={index} className={index === page ? 'album-dot is-active' : 'album-dot'} />
         ))}
       </div>

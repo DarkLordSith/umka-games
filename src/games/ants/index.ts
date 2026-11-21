@@ -1,5 +1,6 @@
 // Муравьи — модуль игры по контракту (src/engine/types.ts).
 import type { GameModule } from '../../engine/types';
+import { antsAlbum } from './album';
 import { levelFromSpec, nextPicture } from './generator';
 import { AntsIcon } from './Icon';
 import { type AntsMove, type AntsState, applyMove, isStuck, isWon } from './logic';
@@ -16,6 +17,7 @@ export const antsGame: GameModule<AntsState, AntsMove> = {
   makeLevel: levelFromSpec,
   nextVariant: nextPicture,
   Thumbnail: AntsThumbnail,
+  album: antsAlbum,
   applyMove,
   isWon,
   isStuck,
