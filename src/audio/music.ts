@@ -11,9 +11,11 @@
 // вернулся — продолжение с того же места. Выключатель «Музыка» — settings.music.
 import { audioContext, audioSettings, musicOutput, onAudioReady, onAudioSettings } from './engine';
 import { barScore, type BarScore, SECONDS_PER_STEP, STEPS_PER_BAR, swingOffset } from './musicScore';
+import { MIX } from './mix';
 
 /** Громкость музыки: фон, RMS ≈ −38 dBFS — на ~7 dB тише «тапа» и на ~20 dB тише голоса (офлайн-рендер). */
-export const MUSIC_LEVEL = 0.17;
+/** Уровень музыки — из микшера (mix.ts). */
+export const MUSIC_LEVEL = MIX.music;
 const LOOKAHEAD_S = 0.2;
 const SCHEDULE_EVERY_MS = 50;
 const FADE_IN_S = 2.5;
