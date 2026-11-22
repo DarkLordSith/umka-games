@@ -4,17 +4,15 @@
 //
 // Три канала: эффекты, голос и музыка. Пока звучит голос, эффекты тише, а музыка — ещё тише.
 // Выключатели из родительского экрана (progress.settings) применяет оболочка: setAudioSettings.
+// Громкости — в mix.ts.
+
+import { MIX } from './mix';
 
 export interface AudioSettings {
   readonly sfx: boolean;
   readonly voice: boolean;
   readonly music: boolean;
 }
-
-/** Громкость эффектов, пока звучит голос. */
-const DUCKED = 0.35;
-/** Громкость музыки, пока звучит голос (приглушается сильнее эффектов). */
-const MUSIC_DUCKED = 0.2;
 
 let context: AudioContext | null = null;
 let sfxBus: GainNode | null = null;
@@ -36,6 +34,8 @@ function create(): AudioContext | null {
   sfxBus = created.createGain();
   voiceBus = created.createGain();
   musicBus = created.createGain();
+  sfxBus.gain.value = MIX.sfx;
+  voiceBus.gain.value = settings.voice ? MIX.voice : 0;
   sfxBus.connect(created.destination);
   voiceBus.connect(created.destination);
   musicBus.connect(created.destination);
@@ -102,7 +102,7 @@ export function setAudioSettings(next: AudioSettings): void {
   }
   // выключили голос посреди фразы — замолкает сразу
   if (voiceBus && context) {
-    voiceBus.gain.setValueAtTime(next.voice ? 1 : 0, context.currentTime);
+    voiceBus.gain.setValueAtTime(next.voice ? MIX.voice : 0, context.currentTime);
   }
 }
 
@@ -123,7 +123,8 @@ export function musicOutput(): GainNode | null {
   return musicBus;
 }
 
-function duck(bus: GainNode | null, level: number, seconds: number): void {
+/** Приглушить канал до level на seconds и вернуть к normal. */
+function duck(bus: GainNode | null, level: number, normal: number, seconds: number): void {
   if (!context || !bus) {
     return;
   }
@@ -133,11 +134,12 @@ function duck(bus: GainNode | null, level: number, seconds: number): void {
   gain.setValueAtTime(gain.value, now);
   gain.linearRampToValueAtTime(level, now + 0.08);
   gain.setValueAtTime(level, now + seconds);
-  gain.linearRampToValueAtTime(1, now + seconds + 0.35);
+  gain.linearRampToValueAtTime(normal, now + seconds + 0.35);
 }
 
 /** Пока звучит голос (seconds): эффекты тише, музыка — ещё тише. */
 export function duckForVoice(seconds: number): void {
-  duck(sfxBus, DUCKED, seconds);
-  duck(musicBus, MUSIC_DUCKED, seconds);
+  duck(sfxBus, MIX.sfx * MIX.sfxUnderVoice, MIX.sfx, seconds);
+  // уровень музыки задаёт её собственный fade (music.ts), канал — только приглушение
+  duck(musicBus, MIX.musicUnderVoice, 1, seconds);
 }
